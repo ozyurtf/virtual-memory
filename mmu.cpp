@@ -158,7 +158,7 @@ void unmap(Frame* victimFrame) {
     victimFrame->allocationStatus = 0;
 
     if (printOutputs) { 
-        cout << outputs.str();
+        printf("%s", outputs.str().c_str());
     }
 };
 
@@ -188,15 +188,17 @@ struct FIFO: public Pager {
     Frame* selectVictimFrame() {
         stringstream aselect;
 
-        aselect << "ASELECT" 
-                << " "
-                << hand
-                << endl;
+
 
         Frame* victimFrame = &FrameTable[hand];
 
         if (printAging) { 
-            cout << aselect.str();
+            aselect << "ASELECT" 
+                    << " "
+                    << hand
+                    << endl;            
+
+            printf("%s", aselect.str().c_str());
         }
 
         hand = (hand + 1) % NumFrames; 
@@ -225,10 +227,13 @@ struct CLOCK: public Pager {
         Process* process = nullptr;
         PageTableEntry* PTE = nullptr;
 
-        aselect << "ASELECT" 
-                << " "
-                << hand   
-                << " ";    
+
+        if (printAging) { 
+            aselect << "ASELECT" 
+                    << " "
+                    << hand   
+                    << " ";  
+        }  
 
         while (!stop) {
 
@@ -250,10 +255,9 @@ struct CLOCK: public Pager {
             hand = (hand + 1) % NumFrames;           
         }
 
-        aselect << inspect << endl;
-
         if (printAging) { 
-            cout << aselect.str();
+            aselect << inspect << endl;
+            printf("%s", aselect.str().c_str());
         }
 
         victimFrame = &FrameTable[victimFrameInd];
@@ -264,6 +268,10 @@ struct CLOCK: public Pager {
 
 struct ESC: public Pager {  
     unsigned int hand: 7;  
+
+    ESC() { 
+        hand = 0;
+    }    
     
     Frame* selectVictimFrame() {
 
@@ -285,18 +293,20 @@ struct ESC: public Pager {
         Process* process = nullptr;
         PageTableEntry* PTE = nullptr;
 
-        aselect << "ASELECT" 
-                << ":"
-                << " "
-                << "hand"
-                << "="
-                << setw(2)
-                << hand   
-                << setw(2)
-                << reset
-                << setw(2)
-                << "|"
-                << " ";
+        if (printAging) { 
+            aselect << "ASELECT" 
+                    << ":"
+                    << " "
+                    << "hand"
+                    << "="
+                    << setw(2)
+                    << hand   
+                    << setw(2)
+                    << reset
+                    << setw(2)
+                    << "|"
+                    << " ";
+        }
       
         while (!stop) {
                                     
@@ -346,33 +356,45 @@ struct ESC: public Pager {
         if (!class0.empty()) { 
             victimFrameInd = class0.front();
             class0.pop_front();
-            aselect << "0 " << setw(2);
+
+            if (printAging) { 
+                aselect << "0 " << setw(2);
+            }
         }
         else if (class0.empty() && !class1.empty()) { 
             victimFrameInd = class1.front();
             class1.pop_front(); 
-            aselect << "1 " << setw(2);
+
+            if (printAging) { 
+                aselect << "1 " << setw(2);
+            }
         }
 
         else if (class0.empty() && class1.empty() && !class2.empty()) { 
             victimFrameInd = class2.front();
             class2.pop_front(); 
-            aselect << "2 " << setw(2);           
+
+            if (printAging) { 
+                aselect << "2 " << setw(2);           
+            }
         }  
 
         else if (class0.empty() && class1.empty() && class2.empty() && !class3.empty()) { 
             victimFrameInd = class3.front();
             class3.pop_front();  
-            aselect << "3 " << setw(2);         
+
+            if (printAging) { 
+                aselect << "3 " << setw(2);         
+            }
         }
 
-        aselect << victimFrameInd 
-                << " "
-                << setw(2)
-                << inspect;
 
         if (printAging) { 
-            cout << aselect.str() << endl;                
+            aselect << victimFrameInd 
+                    << " "
+                    << setw(2)
+                    << inspect;            
+            printf("%s\n", aselect.str().c_str());               
         }
 
         victimFrame = &FrameTable[victimFrameInd]; 
@@ -403,10 +425,12 @@ struct AGING: public Pager {
         stringstream aselectDuring;
         stringstream aselectAfter;
 
-        aselectBefore << "ASELECT"
-                      << " "
-                      << start 
-                      << "-";    
+        if (printAging) { 
+            aselectBefore << "ASELECT"
+                          << " "
+                          << start 
+                          << "-";  
+        }  
         
         Frame* victimFrame = nullptr;
         Frame* frame = nullptr;
@@ -430,39 +454,34 @@ struct AGING: public Pager {
                 victimFrameInd = hand;
             } 
 
-            aselectDuring << hand
-                          << ":"
-                          << hex 
-                          << frame->age
-                          << dec
-                          << " ";            
+            if (printAging) { 
+                aselectDuring << hand
+                            << ":"
+                            << hex 
+                            << frame->age
+                            << dec
+                            << " ";  
+            }          
 
             end = hand;   
-
             hand = (hand + 1) % NumFrames;
 
             if (start == hand) { 
                 stop = true;
             }
                
-        }
-
-        aselectBefore << end << " ";
-
-        aselectAfter << victimFrameInd;                       
+        };
 
         victimFrame = &FrameTable[victimFrameInd];
         hand = (victimFrameInd + 1) % NumFrames;
 
         if (printAging)  { 
-            cout << aselectBefore.str() 
-                 << "|" 
-                 << " "
-                 << aselectDuring.str() 
-                 << "|" 
-                 << " "
-                 << aselectAfter.str()
-                 << endl;
+            aselectBefore << end << " ";
+            aselectAfter << victimFrameInd;                
+
+            printf("%s | %s | %s\n", aselectBefore.str().c_str(), 
+                                     aselectDuring.str().c_str(), 
+                                     aselectAfter.str().c_str());
         }
         
         unmap(victimFrame);
@@ -497,10 +516,12 @@ struct WORKSET: public Pager {
         stringstream aselectDuring;
         stringstream aselectAfter;
 
-        aselectBefore << "ASELECT"
-                      << " "
-                      << start 
-                      << "-";           
+        if (printAging) { 
+            aselectBefore << "ASELECT"
+                        << " "
+                        << start 
+                        << "-";       
+        }    
 
         Frame* victimFrame = nullptr;
         Frame* frame = nullptr;
@@ -516,17 +537,19 @@ struct WORKSET: public Pager {
             PTE = &process->PageTable[frame->vpage];
             age = totalcost.currentInst - frame->lastuse;
 
-            aselectDuring << hand 
-                          << "("                  
-                          << PTE->referenced
-                          << " "
-                          << frame->pid
-                          << ":"
-                          << frame->vpage
-                          << " "
-                          << frame->lastuse
-                          << ")"
-                          << " ";  
+            if (printAging) { 
+                aselectDuring << hand 
+                            << "("                  
+                            << PTE->referenced
+                            << " "
+                            << frame->pid
+                            << ":"
+                            << frame->vpage
+                            << " "
+                            << frame->lastuse
+                            << ")"
+                            << " ";  
+            }
                            
                      
             if (PTE->referenced) { 
@@ -546,12 +569,16 @@ struct WORKSET: public Pager {
                 
                 if (age > 49) { 
                     victimFrameInd = hand;
-                    aselectDuring << "STOP" 
-                                  << "(" 
-                                  << inspect
-                                  << ")" 
-                                  << " ";
                     selected = true;
+
+                    if (printAging) { 
+                        aselectDuring << "STOP" 
+                                    << "(" 
+                                    << inspect
+                                    << ")" 
+                                    << " ";
+                    }
+
                     break;
                 }
             }
@@ -584,22 +611,14 @@ struct WORKSET: public Pager {
             }  
         }
 
-        hand = (victimFrameInd + 1) % NumFrames;
-
-        aselectBefore << end;
-
-        aselectAfter << victimFrameInd;                      
+        hand = (victimFrameInd + 1) % NumFrames;      
 
         if (printAging)  { 
-            cout << aselectBefore.str() 
-                 << " "
-                 << "|" 
-                 << " "
-                 << aselectDuring.str() 
-                 << "|" 
-                 << " "
-                 << aselectAfter.str()
-                 << endl;
+            aselectBefore << end;
+            aselectAfter << victimFrameInd;   
+            printf("%s | %s | %s\n", aselectBefore.str().c_str(), 
+                                     aselectDuring.str().c_str(), 
+                                     aselectAfter.str().c_str());
         }
 
         victimFrame = &FrameTable[victimFrameInd];                  
@@ -705,7 +724,7 @@ void mapPTE(int vpage, int pid, char pager) {
     }
 
     if (printOutputs) { 
-        cout << outputs.str();
+        printf("%s", outputs.str().c_str());
     }
 };
 
@@ -874,7 +893,7 @@ int main(int argc, char* argv[]) {
                           << endl;
 
                 if (printOutputs) { 
-                    cout << outputsCS.str();
+                    printf("%s", outputsCS.str().c_str());
                 }
             }
 
@@ -909,7 +928,7 @@ int main(int argc, char* argv[]) {
                 PTE->referenced = 1; 
 
                 if (printOutputs) { 
-                    cout << outputsRW.str();
+                    printf("%s", outputsRW.str().c_str());
                 }
 
                 mapPTE(vpage, currentPID, pager);
@@ -922,7 +941,7 @@ int main(int argc, char* argv[]) {
 
                     else if (PTE->writeProtect) { 
                         if (printOutputs) { 
-                            cout << " SEGPROT" << endl;
+                            printf(" SEGPROT\n");
                         }
                         currentStats->segprot++;
                     }
@@ -935,21 +954,11 @@ int main(int argc, char* argv[]) {
                 stringstream outputsEX;
                 
                 if (printOutputs) { 
-                    cout << instructionNum
-                        << ":" 
-                        << " " 
-                        << "==>" 
-                        << " "
-                        << operation
-                        << " "
-                        << exitPID
-                        << endl;
+                    printf("%d: ==> %c %d\n", instructionNum, operation, exitPID);
+
                 }
                 
-                cout << "EXIT current process" 
-                     << " " 
-                     << exitPID 
-                     << endl;
+                printf("EXIT current process %d\n", exitPID);
 
                 totalcost.processExits++;
                 totalcost.cost += 1230;
@@ -990,7 +999,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (printOutputs) { 
-                    cout << outputsEX.str();
+                    printf("%s", outputsEX.str().c_str());
                 }
             }
             
@@ -1120,7 +1129,8 @@ int main(int argc, char* argv[]) {
             totalcost.sizePTE);
     }
 
-    // Attention: Find a way to delete these
+    // Attention: Find a way to implement 
+    // this without an error.
     // for (auto& freeFrame : FreeFramePool) {
     //     delete freeFrame; 
     // }

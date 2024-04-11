@@ -188,8 +188,6 @@ struct FIFO: public Pager {
     Frame* selectVictimFrame() {
         stringstream aselect;
 
-
-
         Frame* victimFrame = &FrameTable[hand];
 
         if (printAging) { 
@@ -584,7 +582,6 @@ struct WORKSET: public Pager {
             }
 
             end = hand;
-
             hand = (hand + 1) % NumFrames;
 
             if (hand == start) { 
@@ -770,6 +767,7 @@ int main(int argc, char* argv[]) {
                 break;             
         }   
     }
+
     ifstream file(filepath);
     
     int numProcess = 0;
@@ -912,7 +910,6 @@ int main(int argc, char* argv[]) {
                           << endl;    
             
                 PageTableEntry* PTE = &currentProcess->PageTable[vpage];
-
                 vector<VMA> vmas = currentProcess->vmas;                
 
                 for (int i = 0; i < vmas.size(); i++) { 
@@ -1111,14 +1108,14 @@ int main(int argc, char* argv[]) {
                     StatTable[s].segprot);
 
             totalcost.cost += 410 * StatTable[s].unmaps + 
-                            350 * StatTable[s].maps + 
-                            3200 * StatTable[s].ins + 
-                            2750 * StatTable[s].outs + 
-                            2350 * StatTable[s].fins + 
-                            2800 * StatTable[s].fouts + 
-                            150  * StatTable[s].zeros + 
-                            440 * StatTable[s].segv + 
-                            410 * StatTable[s].segprot;     
+                              350 * StatTable[s].maps + 
+                              3200 * StatTable[s].ins + 
+                              2750 * StatTable[s].outs + 
+                              2350 * StatTable[s].fins + 
+                              2800 * StatTable[s].fouts + 
+                              150  * StatTable[s].zeros + 
+                              440 * StatTable[s].segv + 
+                              410 * StatTable[s].segprot;     
         }
 
         printf("TOTALCOST %lu %lu %lu %llu %lu\n",

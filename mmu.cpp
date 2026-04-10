@@ -1125,12 +1125,6 @@ int main(int argc, char* argv[]) {
             totalcost.cost, 
             totalcost.sizePTE);
     }
-
-    // Attention: Find a way to implement 
-    // this without an error.
-    // for (auto& freeFrame : FreeFramePool) {
-    //     delete freeFrame; 
-    // }
     
     return 0;
 }

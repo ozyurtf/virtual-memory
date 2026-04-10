@@ -1,6 +1,10 @@
 # Memory Management Simulator
 
-In this project, I implemented a memory management simulator that models different page replacement algorithms. The project is designed to simulate how operating systems manage virtual memory and how they handle page faults.
+In this project, I implemented a memory management simulator that models different page replacement algorithms. The goal behind the project was simulating how operating systems manage virtual memory and how they handle page faults. Almost everything (including the entire C++ implementation of various CPU scheduling algorithms) was written by me 100% manually. Only the visualization of how my implementation works was created with Claude Code. 
+
+## Demo 
+
+[![Demo](/figures/virtual-memory.png)](https://www.youtube.com/watch?v=NNNUpGNWaA8)
 
 ## Features
 
@@ -16,25 +20,4 @@ In this project, I implemented a memory management simulator that models differe
 - Different types of memory access operations (read, write) are handled.
 - Context switches between processes are simulated.
 - Detailed statistics on memory operations are provided.
-
-## Input Files
-
-The simulator requires two input files:
-1. A file that describes the processes and their memory access patterns.
-2. A file that contains the random numbers that will be used in the Random Page replacement algorithm.
-
-## Implementation Details
-
-- Implemented in C++.
-- Various data structures including vectors, deques, and structs to model memory components are used.
-- Different paging algorithms as separate structs with a common interface are used.
-
-## Potential Extensions
-
-- Graphical visualization of memory states.
-- Support for more page replacement algorithms.
-- Parallel simulation of multiple memory management strategies for comparison.
-
-Overall, this project provides a comprehensive simulation of memory management in operating systems. It is useful for educational purposes and understanding how operating systems manage virtual memory.
-
 

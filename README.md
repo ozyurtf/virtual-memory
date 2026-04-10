@@ -1,6 +1,6 @@
-# Memory Management Simulator
+# Virtual Memory Simulator
 
-In this project, I implemented a memory management simulator that models different page replacement algorithms. The goal behind the project was simulating how operating systems manage virtual memory and how they handle page faults. Almost everything (including the entire C++ implementation of various CPU scheduling algorithms) was written by me 100% manually. Only the simulation of how my implementation works was created with Claude Code with my guidance. 
+In this project, I implemented a virtual memory simulator that models different page replacement algorithms. The goal behind the project was simulating how operating systems manage virtual memory and how they handle page faults. Almost everything (including the entire C++ implementation of various CPU scheduling algorithms) was written by me 100% manually. Only the simulation of how my implementation works was created with Claude Code with my guidance. 
 
 ## Demo 
 

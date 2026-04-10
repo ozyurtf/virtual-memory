@@ -3,7 +3,7 @@ layout: default
 title: Virtual Memory
 ---
 
-<h1 style="color:#0969da">CPU Scheduler</h1>
+<h1 style="color:#0969da">Virtual Memory</h1>
 
 **Note**: In this project, I implemented a memory management simulator that models different page replacement algorithms. The goal behind the project was simulating how operating systems manage virtual memory and how they handle page faults. Almost everything (including the entire C++ implementation of various CPU scheduling algorithms) was written by me 100% manually. Only the visualization of how my implementation works was created with Claude Code. 
 

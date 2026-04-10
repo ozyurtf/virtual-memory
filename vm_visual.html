@@ -1,0 +1,2614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Virtual Memory — Interactive Visualization</title>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #0d1117;
+  --s1:      #161b22;
+  --s2:      #21262d;
+  --border:  #30363d;
+  --b2:      #21262d;
+
+  --blue:    #58a6ff;
+  --blue-bg: #0d2443;
+  --green:   #3fb950;
+  --grn-bg:  #0a2218;
+  --amber:   #d29922;
+  --amb-bg:  #271d06;
+  --red:     #f85149;
+  --red-bg:  #2a0d0d;
+  --purple:  #bc8cff;
+  --pur-bg:  #1a0d2e;
+
+  --text:    #e6edf3;
+  --tsec:    #8b949e;
+  --tdim:    #484f58;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 1100px;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+#hdr {
+  flex-shrink: 0;
+  background: #010409;
+  border-bottom: 1px solid var(--border);
+  padding: 0 10px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+}
+#hdr-logo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hdr-div { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+.ctrl-row { display: flex; align-items: center; gap: 4px; }
+.ctrl-lbl { color: var(--tsec); font-size: 10px; white-space: nowrap; }
+
+select, .btn {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+select:hover, .btn:hover { border-color: var(--tsec); }
+.btn:disabled { color: var(--tdim); cursor: default; }
+.btn.primary { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+.btn.primary:hover { background: #1a3a6e; }
+.btn.primary.playing { background: #270d0d; border-color: var(--red); color: var(--red); }
+
+
+/* Narrative header */
+#nar-title {
+  font-size: 10px; font-weight: 600;
+  color: var(--tsec);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.step-badge {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--tsec);
+  white-space: nowrap;
+}
+.step-badge span { color: var(--text); font-weight: 600; }
+
+#speed-wrap { display: flex; align-items: center; gap: 4px; }
+#speed { width: 55px; accent-color: var(--blue); }
+
+.kbd { margin-left: auto; color: var(--tdim); font-size: 9px; white-space: nowrap; }
+.kbd kbd {
+  background: var(--s2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 3px; font-size: 9px;
+  font-family: inherit;
+}
+
+/* ── Main area ───────────────────────────────────────────────────────────────── */
+#main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 175px 1fr 205px 185px;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* ── Arrow SVG overlay ────────────────────────────────────────────────────────  */
+#arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: visible;
+}
+
+/* ── Column chrome ───────────────────────────────────────────────────────────── */
+.col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  min-height: 0;
+}
+.col:last-child { border-right: none; }
+.col-hdr {
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  background: #0c1117;
+}
+.col-hdr h3 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tsec);
+}
+.col-hdr p {
+  font-size: 10px;
+  color: var(--tdim);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.col-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+}
+.col-body::-webkit-scrollbar { width: 4px; }
+.col-body::-webkit-scrollbar-track { background: transparent; }
+.col-body::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 2px; }
+
+/* ── Virtual Address Space ───────────────────────────────────────────────────── */
+#col-vas .col-hdr h3 { color: var(--blue); }
+.vas-proc-tabs { display: flex; gap: 0; margin-bottom: 6px; }
+.vas-tab {
+  flex: 1; padding: 3px 6px; text-align: center;
+  font-size: 10px; cursor: pointer; color: var(--tdim);
+  border: 1px solid var(--border); border-right: none; background: var(--s2);
+}
+.vas-tab:last-child { border-right: 1px solid var(--border); }
+.vas-tab.active { color: var(--blue); background: var(--blue-bg); border-color: var(--blue); }
+.vas-tab:first-child { border-radius: 4px 0 0 4px; }
+.vas-tab:last-child  { border-radius: 0 4px 4px 0; }
+
+.vma-legend { margin-bottom: 8px; }
+.vma-leg-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--tsec); margin-bottom: 2px; }
+.vma-leg-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+.vp-list { display: flex; flex-direction: column; gap: 1px; }
+.vp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+  cursor: default;
+  min-height: 26px;
+  position: relative;
+}
+.vp-row .vp-num  { font-family: monospace; font-size: 11px; color: var(--tdim); min-width: 18px; text-align: right; }
+.vp-row .vp-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.vp-row .vp-addr { font-family: monospace; font-size: 10px; color: var(--tdim); }
+.vp-row .vp-fl   { font-size: 9px; color: var(--tdim); margin-left: auto; }
+
+.vp-novma   { }
+.vp-novma .vp-dot { background: var(--b2); }
+
+.vp-miss    { }
+.vp-miss .vp-dot { background: var(--s2); border: 1px solid var(--border); }
+.vp-miss .vp-num, .vp-miss .vp-addr { color: var(--tdim); }
+
+.vp-present .vp-dot { background: var(--green); }
+.vp-present .vp-num  { color: var(--text); }
+.vp-present .vp-addr { color: var(--tsec); }
+
+.vp-dirty   .vp-dot { background: var(--amber); }
+.vp-dirty   .vp-num  { color: var(--text); }
+.vp-dirty   .vp-addr { color: var(--tsec); }
+
+.vp-swap    .vp-dot { background: var(--amber); }
+.vp-swap    .vp-num  { color: var(--amber); }
+.vp-swap    .vp-addr { color: var(--tdim); }
+
+.vp-active {
+  background: var(--blue-bg) !important;
+  border-color: var(--blue) !important;
+}
+.vp-active .vp-num  { color: var(--blue) !important; }
+.vp-active .vp-addr { color: var(--blue) !important; }
+
+/* VMA left-border stripe */
+.vma-stripe {
+  position: absolute; left: 0; top: 2px; bottom: 2px;
+  width: 3px; border-radius: 2px;
+}
+
+/* ── Page Table ───────────────────────────────────────────────────────────────── */
+#col-pt .col-hdr h3 { color: var(--tsec); }
+.pt-proc-hdr {
+  font-size: 10px; font-weight: 600; color: var(--tsec);
+  display: flex; align-items: center; gap: 5px;
+  padding-bottom: 4px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.pt-proc-hdr::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 1px; flex-shrink: 0;
+  background: linear-gradient(135deg, #1a3a20, #2e6040);
+}
+
+#pt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+}
+#pt-table thead th {
+  padding: 4px 6px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tdim);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: #0d1117;
+  z-index: 2;
+}
+#pt-table tbody tr {
+  border-bottom: 1px solid var(--b2);
+  transition: background 0.1s;
+}
+#pt-table tbody tr:hover { background: var(--s2); }
+#pt-table td {
+  padding: 3px 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.pt-vpn { font-family: monospace; font-weight: 600; color: var(--blue); }
+.pt-addr { font-family: monospace; color: var(--tdim); font-size: 10px; }
+.pt-frame { font-family: monospace; font-weight: 600; }
+.pt-frame.present { color: var(--green); }
+.pt-frame.swapped { color: var(--amber); }
+.pt-frame.fault   { color: var(--tdim); }
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pill-ram    { background: var(--grn-bg); color: var(--green); border: 1px solid #1a5c28; }
+.pill-fault  { background: #1a0808; color: var(--tsec); border: 1px solid var(--b2); }
+.pill-swap   { background: var(--amb-bg); color: var(--amber); border: 1px solid #4a3008; }
+.pill-novma  { background: var(--s2); color: var(--tdim); border: 1px solid var(--b2); }
+.pill-segv   { background: var(--red-bg); color: var(--red); border: 1px solid #5a1a1a; }
+.pill-wp     { background: var(--blue-bg); color: var(--blue); border: 1px solid #1a3a6e; }
+.pill-fm     { background: var(--pur-bg); color: var(--purple); border: 1px solid #3a1a6e; }
+
+.bit-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.bit-on-R  { background: var(--green); }
+.bit-on-M  { background: var(--amber); }
+.bit-off   { background: var(--b2); border: 1px solid var(--border); }
+
+.pt-row-active {
+  background: var(--blue-bg) !important;
+}
+.pt-row-active .pt-vpn, .pt-row-active .pt-addr { color: var(--blue) !important; }
+
+/* ── Physical Memory — single RAM chip ───────────────────────────────────────── */
+#col-ram .col-hdr h3 { color: var(--green); }
+.ram-util {
+  font-size: 10px; color: var(--tsec); margin-bottom: 6px;
+  display: flex; gap: 6px; align-items: center;
+}
+.ram-bar-bg { flex: 1; height: 4px; background: var(--s2); border-radius: 2px; }
+.ram-bar-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.2s; }
+
+/* One chip housing wrapping all frame rows */
+.ram-chip {
+  border: 1px solid #2a4830;
+  border-radius: 5px;
+  background: linear-gradient(175deg, #0b1c0e 0%, #070f08 100%);
+  padding: 6px 5px 5px;
+  position: relative;
+  overflow: hidden;
+}
+/* subtle IC-chip label across the top of the housing */
+.ram-chip::before {
+  content: 'DRAM  64-BIT  4 KiB / FRAME';
+  display: block;
+  font-family: monospace;
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: #253e28;
+  text-align: center;
+  margin-bottom: 5px;
+  border-bottom: 1px solid #162019;
+  padding-bottom: 4px;
+}
+/* pin-row decorations along left and right edges */
+.ram-chip::after {
+  content: '';
+  position: absolute;
+  top: 28px; bottom: 5px; left: 0; right: 0;
+  background:
+    repeating-linear-gradient(180deg, #1a2e1c 0px, #1a2e1c 3px, transparent 3px, transparent 6px) 0 0 / 5px 100% no-repeat,
+    repeating-linear-gradient(180deg, #1a2e1c 0px, #1a2e1c 3px, transparent 3px, transparent 6px) 100% 0 / 5px 100% no-repeat;
+  pointer-events: none;
+}
+
+.frame-list { display: flex; flex-direction: column; gap: 1px; }
+
+/* Individual address row inside the chip */
+.frame-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 2px;
+  border: 1px solid #0e1c10;
+  border-left: 2px solid #162419;
+  background: #060d07;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  min-height: 30px;
+  position: relative;
+}
+.frame-cell.free {
+  opacity: 0.45;
+}
+/* Process color — left accent */
+.frame-cell.p0 { border-left: 2px solid var(--green);  background: #060e07; }
+.frame-cell.p1 { border-left: 2px solid var(--blue);   background: #05090f; }
+.frame-cell.p2 { border-left: 2px solid var(--purple); background: #080610; }
+.frame-cell.p3 { border-left: 2px solid var(--red);    background: #0c0606; }
+
+.frame-num {
+  font-family: monospace; font-size: 9px; color: #2e4a30;
+  min-width: 26px;
+  letter-spacing: 0.03em;
+}
+.frame-content { flex: 1; }
+.frame-pid-vp { font-family: monospace; font-size: 11px; font-weight: 600; }
+.frame-cell.p0 .frame-pid-vp { color: var(--green); }
+.frame-cell.p1 .frame-pid-vp { color: var(--blue); }
+.frame-cell.p2 .frame-pid-vp { color: var(--purple); }
+.frame-cell.p3 .frame-pid-vp { color: var(--red); }
+.frame-free-lbl { font-size: 10px; color: #1e3020; }
+.frame-vaddr { font-family: monospace; font-size: 9px; color: #253a27; }
+
+/* Dirty-bit LED */
+.frame-dirty-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.frame-dirty-dot.dirty {
+  background: var(--amber);
+  box-shadow: 0 0 4px rgba(210,153,34,0.7);
+}
+.frame-dirty-dot.clean {
+  background: #0c1a0e;
+  border: 1px solid #182c1a;
+}
+
+/* Highlight states */
+.frame-cell.frame-active {
+  border-left-color: var(--blue) !important;
+  background: #040c18 !important;
+  box-shadow: inset 0 0 8px rgba(88,166,255,0.08) !important;
+}
+.frame-cell.frame-mapped {
+  border-left-color: var(--green) !important;
+  background: #051008 !important;
+  box-shadow: inset 0 0 8px rgba(63,185,80,0.07) !important;
+}
+.frame-cell.frame-evicted {
+  border-left-color: var(--amber) !important;
+  background: #100c04 !important;
+  box-shadow: inset 0 0 8px rgba(210,153,34,0.06) !important;
+}
+
+/* ── Disk — realistic HDD SVG ────────────────────────────────────────────────── */
+#col-disk .col-hdr h3 { color: var(--amber); }
+
+/* Groups the HDD graphic + swap/file sections to show they share the same disk */
+.disk-storage-group {
+  position: relative;
+  border: 1px solid #222228;
+  border-radius: 6px;
+  padding: 6px 5px 5px;
+}
+.disk-storage-group::before {
+  content: 'on-disk storage';
+  position: absolute;
+  top: -7px; left: 8px;
+  font-size: 8px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--tdim); background: var(--s1); padding: 0 4px;
+}
+
+.disk-visual { margin-bottom: 8px; }
+.hdd-svg { display: block; margin: 0 auto; border-radius: 8px; overflow: visible; }
+
+/* HDD arm seek is driven by JS (animateArm) — see script section */
+@keyframes head-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%       { opacity: 1; }
+}
+@keyframes platter-sheen {
+  0%, 100% { opacity: 0.04; }
+  50%       { opacity: 0.10; }
+}
+.disk-active .hdd-head-glow { animation: head-pulse 0.4s ease-in-out infinite; }
+.disk-active .hdd-arm-body  { stroke: #b07820; }
+.disk-active .hdd-sheen     { animation: platter-sheen 0.4s ease-in-out infinite; }
+
+.disk-sec-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tsec);
+  padding-left: 6px;
+  border-left: 2px solid transparent;
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+.disk-sec-title .cnt { color: var(--tdim); font-weight: 400; }
+.disk-sec-title.swap-title { color: var(--amber); border-left-color: var(--amber); }
+.disk-sec-title.file-title { color: var(--purple); border-left-color: var(--purple); }
+
+.disk-legend {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 4px 0 8px;
+}
+.disk-legend-swap { color: var(--amber); }
+.disk-legend-file { color: var(--purple); }
+
+.swap-grid, .file-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+/* ── Disk block / sector cards ── */
+.swap-slot, .file-slot {
+  position: relative;
+  padding: 5px 6px 9px;
+  border-radius: 3px;
+  font-family: monospace;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: default;
+}
+/* Binary data stripe at bottom (simulates sector data density) */
+.swap-slot::after, .file-slot::after {
+  content: '';
+  position: absolute;
+  bottom: 2px; left: 4px; right: 4px; height: 3px;
+  border-radius: 1px;
+}
+.slot-addr {
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+  opacity: 0.65;
+}
+.slot-content {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.slot-type {
+  position: absolute;
+  top: 4px; right: 5px;
+  font-size: 6.5px;
+  letter-spacing: 0.08em;
+  opacity: 0.45;
+}
+
+/* Swap (anonymous dirty pages) */
+.swap-slot {
+  border: 1px solid #3a2608;
+  background: linear-gradient(160deg, #1a0e04 0%, #0e0802 100%);
+}
+.swap-slot::after {
+  background: repeating-linear-gradient(90deg,
+    rgba(210,153,34,0.55) 0px, rgba(210,153,34,0.55) 2px,
+    rgba(210,153,34,0.12) 2px, rgba(210,153,34,0.12) 3.5px,
+    rgba(210,153,34,0.40) 3.5px, rgba(210,153,34,0.40) 5px,
+    rgba(210,153,34,0.08) 5px, rgba(210,153,34,0.08) 7px
+  );
+}
+.swap-slot .slot-addr    { color: #8a6018; }
+.swap-slot .slot-content { color: var(--amber); }
+.swap-slot .slot-type    { color: var(--amber); }
+
+.swap-slot.new  {
+  border-color: var(--amber) !important;
+  box-shadow: 0 0 0 1px rgba(210,153,34,0.3), inset 0 0 12px rgba(210,153,34,0.08) !important;
+  animation: blk-in 0.45s ease;
+}
+.swap-slot.read {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 1px rgba(88,166,255,0.3) !important;
+  animation: blk-out 0.45s ease;
+}
+
+/* File store (file-mapped dirty pages) */
+.file-slot {
+  border: 1px solid #321670;
+  background: linear-gradient(160deg, #180a2e 0%, #0e0620 100%);
+}
+.file-slot::after {
+  background: repeating-linear-gradient(90deg,
+    rgba(188,140,255,0.50) 0px, rgba(188,140,255,0.50) 2px,
+    rgba(188,140,255,0.10) 2px, rgba(188,140,255,0.10) 3.5px,
+    rgba(188,140,255,0.35) 3.5px, rgba(188,140,255,0.35) 5px,
+    rgba(188,140,255,0.07) 5px, rgba(188,140,255,0.07) 7px
+  );
+}
+.file-slot .slot-addr    { color: #7a4ab0; }
+.file-slot .slot-content { color: var(--purple); }
+.file-slot .slot-type    { color: var(--purple); }
+
+.file-slot.new  {
+  border-color: var(--purple) !important;
+  box-shadow: 0 0 0 1px rgba(188,140,255,0.3), inset 0 0 12px rgba(188,140,255,0.08) !important;
+  animation: blk-in 0.45s ease;
+}
+.file-slot.read {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 1px rgba(88,166,255,0.3) !important;
+  animation: blk-out 0.45s ease;
+}
+
+.disk-empty-msg { font-size: 10px; color: var(--tdim); font-style: italic; padding: 4px 0 8px; }
+
+@keyframes blk-in  { from { opacity:0; transform:translateY(-4px) scale(0.92); } to { opacity:1; transform:none; } }
+@keyframes blk-out { from { opacity:0.6; } to { opacity:1; } }
+
+/* ── Footer: Narrative + Stats ───────────────────────────────────────────────── */
+#footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: #0c1017;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0;
+  max-height: 140px;
+}
+#narrative-area {
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+#narrative-area::-webkit-scrollbar { width: 3px; }
+#narrative-area::-webkit-scrollbar-thumb { background: var(--b2); }
+#narrative-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #c9d1d9;
+}
+#narrative-text b { color: var(--text); }
+#narrative-text .dim { opacity: .55; }
+/* Inline narrative labels — colored text only, no box */
+.nl { font-weight: 600; margin-right: 2px; }
+.nl.hit   { color: var(--green);  }
+.nl.fault { color: var(--amber);  }
+.nl.bad   { color: var(--red);    }
+.nl.info  { color: var(--blue);   }
+.nl.file  { color: var(--purple); }
+
+#stats-area {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 310px;
+}
+.stats-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.st-pid { font-size: 10px; font-weight: 600; color: var(--tsec); min-width: 46px; }
+.st-k { font-size: 10px; color: var(--tdim); }
+.st-v { font-size: 11px; font-weight: 600; color: var(--text); font-family: monospace; }
+.st-v.maps    { color: var(--green); }
+.st-v.outs    { color: var(--amber); }
+.st-v.segv    { color: var(--red); }
+.st-v.segprot { color: var(--red); }
+
+.stats-total {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: center;
+}
+.cost-val { font-family: monospace; font-size: 12px; font-weight: 700; color: var(--blue); }
+
+/* ── Arrow animations (dash length set dynamically in JS via getTotalLength) ─── */
+
+/* ── Misc ─────────────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 2px; }
+
+.tag {
+  display: inline-block;
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.tag-wp { background: var(--blue-bg); color: var(--blue); }
+.tag-fm { background: var(--pur-bg); color: var(--purple); }
+
+/* ── CPU / MMU Panel ─────────────────────────────────────────────────────────── */
+#cpu-panel {
+  background: linear-gradient(160deg, #090e1c 0%, #060810 100%);
+  border: 1px solid #18263e;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.cpu-panel-hdr {
+  font-size: 9px; font-weight: 600; color: #3a5a88;
+  text-transform: uppercase; letter-spacing: 0.09em;
+  margin-bottom: 7px;
+  display: flex; align-items: center; gap: 5px;
+}
+.cpu-panel-hdr::before {
+  content: ''; display: inline-block;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #3a5a88;
+}
+.cpu-row { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; }
+.cpu-lbl { font-size: 9px; color: var(--tdim); min-width: 36px; padding-top: 1px; }
+.cpu-val { font-family: monospace; font-size: 11px; font-weight: 600; color: var(--text); }
+.cpu-val.v-proc  { color: var(--green); }
+.cpu-val.v-instr { color: var(--blue); }
+.xlate-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 10px; margin-top: 5px;
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+}
+.xlate-hit   { background: var(--grn-bg); color: var(--green); border: 1px solid #1a5c28; }
+.xlate-miss  { background: var(--amb-bg); color: var(--amber); border: 1px solid #4a3008; }
+.xlate-fault { background: var(--red-bg); color: var(--red);   border: 1px solid #5a1a1a; }
+.xlate-ctx   { background: var(--blue-bg); color: var(--blue); border: 1px solid #1a3a6e; }
+.xlate-idle  { background: var(--s2); color: var(--tdim); border: 1px solid var(--border); }
+
+/* ── Address Translation Diagram ─────────────────────────────────────────────── */
+#xlate-diagram {
+  margin: 6px 0 5px;
+  padding: 7px 8px;
+  background: #07080f;
+  border: 1px solid #1a1e30;
+  border-radius: 5px;
+}
+.xlate-addr-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+}
+.xlate-addr-tag {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.1em;
+  padding: 1px 4px; border-radius: 3px;
+}
+.xlate-tag-v { background: var(--blue-bg); color: var(--blue); border: 1px solid #1a3a6e; }
+.xlate-tag-p { background: var(--grn-bg);  color: var(--green); border: 1px solid #1a5c28; }
+.xlate-addr-hex {
+  font-family: monospace; font-size: 12px; font-weight: 700; color: var(--text);
+  letter-spacing: 0.05em;
+}
+.xlate-paddr { color: var(--green); }
+
+.xlate-fields {
+  display: flex; align-items: stretch; border-radius: 4px;
+  overflow: hidden; border: 1px solid #1e2240; margin-bottom: 5px;
+}
+.xlate-field {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 4px 6px; gap: 2px;
+}
+.xlate-vpn { background: #0a1028; border-right: 1px solid #1e2240; flex: 0 0 auto; min-width: 42px; }
+.xlate-pfn { background: #081a0a; border-right: 1px solid #1e2240; flex: 0 0 auto; min-width: 42px; }
+.xlate-off { background: #0c0c14; flex: 1; }
+.xlate-field-val {
+  font-family: monospace; font-size: 13px; font-weight: 700; color: var(--text);
+}
+.xlate-vpn .xlate-field-val { color: var(--blue); }
+.xlate-pfn .xlate-field-val { color: var(--green); }
+.xlate-off .xlate-field-val { color: var(--tsec); }
+.xlate-field-lbl {
+  font-size: 8px; color: var(--tdim); text-align: center; line-height: 1.3;
+}
+.xlate-bits { color: #303848; font-size: 7.5px; }
+.xlate-field-sep { width: 0; }
+
+.xlate-path-row {
+  display: flex; align-items: center; gap: 4px; margin: 2px 0 6px;
+}
+.xlate-path-line {
+  flex: 1; height: 1px; background: #1e2240;
+}
+.xlate-lookup-badge {
+  font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 8px;
+  white-space: nowrap;
+}
+.xlate-lookup-hit   { background: var(--grn-bg); color: var(--green); border: 1px solid #1a5c28; }
+.xlate-lookup-miss  { background: var(--amb-bg); color: var(--amber); border: 1px solid #4a3008; }
+.xlate-lookup-fault { background: var(--red-bg); color: var(--red);   border: 1px solid #5a1a1a; }
+.xlate-lookup-segv  { background: #1a0808; color: var(--red); border: 1px solid #5a1010; }
+.xlate-lookup-idle  { background: var(--s2); color: var(--tdim); border: 1px solid var(--border); }
+
+/* ── PT fixed top (TLB + proc label, never scrolls) ─────────────────────────── */
+#pt-top {
+  flex-shrink: 0;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Remove padding so the table starts flush at the scroll container edge —
+   this prevents any gap above the sticky thead where rows could bleed through */
+#pt-body { padding: 0; }
+
+/* ── TLB Panel ────────────────────────────────────────────────────────────────── */
+#tlb-panel { margin-bottom: 8px; flex-shrink: 0; }
+.tlb-hdr {
+  font-size: 10px; font-weight: 600; color: var(--tsec);
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.tlb-title-txt { display: flex; align-items: center; gap: 5px; }
+.tlb-chip {
+  width: 8px; height: 8px; border-radius: 1px;
+  background: linear-gradient(135deg, #1f3050, #3a6090);
+  display: inline-block; flex-shrink: 0;
+}
+.tlb-badge {
+  font-size: 9px; background: var(--s2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; color: var(--tdim); font-family: monospace;
+}
+.tlb-badge.is-hit  { background: var(--grn-bg); color: var(--green); border-color: #1a5c28; }
+.tlb-badge.is-miss { background: var(--amb-bg); color: var(--amber); border-color: #4a3008; }
+#tlb-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+#tlb-table thead th {
+  padding: 2px 5px; text-align: left; font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--tdim); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+#tlb-table tbody tr { border-bottom: 1px solid rgba(48,54,61,0.4); }
+#tlb-table tbody tr:hover { background: var(--s2); }
+#tlb-table td { padding: 2px 5px; font-family: monospace; vertical-align: middle; }
+.tlb-v-on  { color: var(--green); font-weight: 700; }
+.tlb-v-off { color: var(--tdim); }
+.tlb-row-hit {
+  background: var(--grn-bg) !important;
+  outline: 1px solid rgba(63,185,80,0.35);
+}
+.tlb-row-hit td { color: var(--green) !important; }
+.tlb-row-new {
+  background: rgba(210,153,34,0.06) !important;
+  outline: 1px solid rgba(210,153,34,0.3);
+}
+.tlb-row-new td { color: var(--amber) !important; }
+.tlb-row-invalid td { color: var(--tdim); opacity: 0.45; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────────────────────── -->
+<header id="hdr">
+  <div id="hdr-logo">
+    Virtual Memory Simulation
+  </div>
+  <div class="hdr-div"></div>
+
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">Input</span>
+    <select id="sel-input">
+      <option value="in1">in1  (1 process, 30 instructions)</option>
+      <option value="in3">in3  (1 process, 100 instructions, 4 VMAs)</option>
+      <option value="in4">in4  (1 process, 100 instructions, write-protected and file-mapped VMAs)</option>
+      <option value="in7">in7  (2 processes, 200 instructions)</option>
+      <option value="in8">in8  (2 processes, 200 instructions, mixed VMAs)</option>
+    </select>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">Frames</span>
+    <select id="sel-frames">
+      <option value="8">8</option>
+      <option value="16" selected>16</option>
+      <option value="32">32</option>
+    </select>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">Algorithm</span>
+    <select id="sel-algo">
+      <option value="f">FIFO</option>
+      <option value="r">Random</option>
+      <option value="c">Clock</option>
+      <option value="e">ESC / NRU</option>
+      <option value="a">Aging</option>
+      <option value="w">Working Set</option>
+    </select>
+  </div>
+  <button class="btn primary" id="btn-load">Load</button>
+  <span id="sim-source" style="font-size:10px;color:var(--tdim)" title="Start server.py to use the real C++ binary">JS fallback</span>
+
+  <div class="hdr-div"></div>
+
+  <button class="btn" id="btn-first" disabled title="First">⏮</button>
+  <button class="btn" id="btn-prev"  disabled title="Back">◀</button>
+  <button class="btn primary" id="btn-play" disabled>▶ Play</button>
+  <button class="btn" id="btn-next"  disabled title="Forward">▶</button>
+  <button class="btn" id="btn-last"  disabled title="Last">⏭</button>
+
+  <div class="hdr-div"></div>
+
+  <div class="step-badge" id="step-badge"><span id="sb-cur">—</span> / <span id="sb-tot">—</span></div>
+
+  <div id="speed-wrap">
+    <span class="ctrl-lbl">Speed</span>
+    <input type="range" id="speed" min="1" max="10" value="5">
+  </div>
+
+  <div class="kbd">
+    <kbd>←</kbd><kbd>→</kbd> step &nbsp; <kbd>Space</kbd> play
+  </div>
+</header>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- SVG arrow overlay -->
+  <svg id="arrows" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ah-green"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polyline points="0,0 6,3.5 0,7" fill="none" stroke="#3fb950" stroke-width="1.5"/>
+      </marker>
+      <marker id="ah-amber"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polyline points="0,0 6,3.5 0,7" fill="none" stroke="#d29922" stroke-width="1.5"/>
+      </marker>
+      <marker id="ah-blue"   markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polyline points="0,0 6,3.5 0,7" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+      </marker>
+      <marker id="ah-red"    markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polyline points="0,0 6,3.5 0,7" fill="none" stroke="#f85149" stroke-width="1.5"/>
+      </marker>
+      <marker id="ah-purple" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polyline points="0,0 6,3.5 0,7" fill="none" stroke="#bc8cff" stroke-width="1.5"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <!-- Column 1: Virtual Address Space -->
+  <div class="col" id="col-vas">
+    <div class="col-hdr">
+      <h3>Virtual Address Space</h3>
+      <p>What the process thinks it owns (64 pages × 4 KiB)</p>
+    </div>
+    <div class="col-body" id="vas-body">
+
+      <!-- CPU / MMU panel -->
+      <div id="cpu-panel">
+        <div class="cpu-panel-hdr">CPU &amp; MMU</div>
+        <div class="cpu-row">
+          <span class="cpu-lbl">Process</span>
+          <span class="cpu-val v-proc" id="cpu-pid">—</span>
+        </div>
+        <div class="cpu-row">
+          <span class="cpu-lbl">Instr</span>
+          <span class="cpu-val v-instr" id="cpu-instr">—</span>
+        </div>
+
+        <!-- Address translation diagram — shown only on r/w -->
+        <div id="xlate-diagram" style="display:none">
+          <!-- Virtual address row -->
+          <div class="xlate-addr-row">
+            <span class="xlate-addr-tag xlate-tag-v">VA</span>
+            <span class="xlate-addr-hex" id="xlate-vaddr">0x00000</span>
+          </div>
+          <!-- Bit-field split -->
+          <div class="xlate-fields">
+            <div class="xlate-field xlate-vpn">
+              <div class="xlate-field-val" id="xlate-vpn">00</div>
+              <div class="xlate-field-lbl">VPN<br><span class="xlate-bits">6 bits</span></div>
+            </div>
+            <div class="xlate-field-sep"></div>
+            <div class="xlate-field xlate-off">
+              <div class="xlate-field-val" id="xlate-off">000</div>
+              <div class="xlate-field-lbl">offset<br><span class="xlate-bits">12 bits</span></div>
+            </div>
+          </div>
+          <!-- Lookup path indicator -->
+          <div class="xlate-path-row">
+            <div class="xlate-path-line"></div>
+            <div id="xlate-lookup" class="xlate-lookup-badge">—</div>
+            <div class="xlate-path-line"></div>
+          </div>
+          <!-- Physical address fields — hidden on fault/segv -->
+          <div id="xlate-phys" style="display:none">
+            <div class="xlate-fields">
+              <div class="xlate-field xlate-pfn">
+                <div class="xlate-field-val" id="xlate-pfn">00</div>
+                <div class="xlate-field-lbl">PFN<br><span class="xlate-bits">4 bits</span></div>
+              </div>
+              <div class="xlate-field-sep"></div>
+              <div class="xlate-field xlate-off">
+                <div class="xlate-field-val" id="xlate-poff">000</div>
+                <div class="xlate-field-lbl">offset<br><span class="xlate-bits">12 bits</span></div>
+              </div>
+            </div>
+            <div class="xlate-addr-row">
+              <span class="xlate-addr-tag xlate-tag-p">PA</span>
+              <span class="xlate-addr-hex xlate-paddr" id="xlate-paddr">0x00000</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="cpu-xlate" class="xlate-status xlate-idle">— idle —</div>
+      </div>
+
+      <div id="vas-proc-tabs" class="vas-proc-tabs"></div>
+      <div id="vma-legend" class="vma-legend"></div>
+      <div id="vp-list" class="vp-list"></div>
+    </div>
+  </div>
+
+  <!-- Column 2: Page Table -->
+  <div class="col" id="col-pt">
+    <div class="col-hdr">
+      <h3>Page Table</h3>
+      <p>The OS mapping from virtual pages → Physical frames (or disk)</p>
+    </div>
+
+    <!-- Fixed top area: TLB panel + process label (does NOT scroll) -->
+    <div id="pt-top">
+
+      <!-- TLB panel -->
+      <div id="tlb-panel">
+        <div class="tlb-hdr">
+          <span class="tlb-title-txt">
+            <span class="tlb-chip"></span>
+            TLB (Translation Lookaside Buffer)
+          </span>
+          <span class="tlb-badge" id="tlb-rate">—</span>
+        </div>
+        <table id="tlb-table">
+          <thead>
+            <tr>
+              <th>#</th><th>V</th><th>PID</th><th>VPN</th><th>Frame</th>
+            </tr>
+          </thead>
+          <tbody id="tlb-tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="pt-proc-hdr" class="pt-proc-hdr">Page Table</div>
+    </div>
+
+    <!-- Scrollable area: ONLY the page table (thead sticks at top:0 with no competition) -->
+    <div class="col-body" id="pt-body">
+      <table id="pt-table">
+        <thead>
+          <tr>
+            <th>VP</th>
+            <th>Virtual Addr</th>
+            <th>Status</th>
+            <th>Frame / Loc</th>
+            <th title="Referenced">R</th>
+            <th title="Modified/Dirty">M</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody id="pt-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Column 3: Physical Memory -->
+  <div class="col" id="col-ram">
+    <div class="col-hdr">
+      <h3>Physical Memory</h3>
+      <p>Physical frames shared across all processes</p>
+    </div>
+    <div class="col-body">
+      <div class="ram-util">
+        <span id="ram-util-txt">0 / 0 used</span>
+        <div class="ram-bar-bg"><div id="ram-bar" class="ram-bar-fill" style="width:0%"></div></div>
+      </div>
+      <div class="ram-chip">
+        <div id="frame-list" class="frame-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column 4: Disk -->
+  <div class="col" id="col-disk">
+    <div class="col-hdr">
+      <h3>Disk Storage</h3>
+      <p>Swap space &amp; file-backed pages evicted from RAM</p>
+    </div>
+    <div class="col-body">
+      <div class="disk-storage-group">
+      <div id="disk-visual-wrap" class="disk-visual">
+        <svg id="hdd-svg" class="hdd-svg" width="162" height="108" viewBox="0 0 162 108"
+             xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <!-- Metallic iridescent platter -->
+            <radialGradient id="rg-platter" cx="40%" cy="35%" r="65%">
+              <stop offset="0%"   stop-color="#2c2c34"/>
+              <stop offset="45%"  stop-color="#1a1a20"/>
+              <stop offset="100%" stop-color="#0c0c0e"/>
+            </radialGradient>
+            <radialGradient id="rg-spindle" cx="38%" cy="32%">
+              <stop offset="0%"   stop-color="#484848"/>
+              <stop offset="100%" stop-color="#101010"/>
+            </radialGradient>
+            <radialGradient id="rg-screw" cx="38%" cy="30%">
+              <stop offset="0%"   stop-color="#505050"/>
+              <stop offset="100%" stop-color="#1c1c1c"/>
+            </radialGradient>
+            <linearGradient id="rg-case" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%"   stop-color="#282828"/>
+              <stop offset="100%" stop-color="#1a1a1a"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Outer aluminium enclosure -->
+          <rect x="1" y="1" width="160" height="106" rx="9"
+                fill="url(#rg-case)" stroke="#3e3e40" stroke-width="1.5"/>
+          <!-- Inner tray recess -->
+          <rect x="5" y="5" width="152" height="98" rx="6"
+                fill="#121214" stroke="#242426" stroke-width="0.6"/>
+
+          <!-- Spinning platter group — rotates continuously around centre (72,54) -->
+          <g id="platter-spin-group">
+            <animateTransform attributeName="transform" type="rotate"
+              from="0 72 54" to="360 72 54" dur="1.5s" repeatCount="indefinite"/>
+            <!-- Magnetic platter -->
+            <circle cx="72" cy="54" r="43" fill="url(#rg-platter)" stroke="#26262e" stroke-width="0.8"/>
+
+            <!-- Track rings -->
+            <circle cx="72" cy="54" r="37" fill="none" stroke="#1c1c22" stroke-width="0.6"/>
+            <circle cx="72" cy="54" r="31" fill="none" stroke="#1c1c22" stroke-width="0.6"/>
+            <circle cx="72" cy="54" r="25" fill="none" stroke="#1c1c22" stroke-width="0.6"/>
+            <circle cx="72" cy="54" r="19" fill="none" stroke="#1e1e24" stroke-width="0.6"/>
+            <circle cx="72" cy="54" r="13" fill="none" stroke="#1e1e24" stroke-width="0.5"/>
+
+            <!-- Dynamic data segments injected by JS (reconcilePlatSegs) -->
+          </g><!-- end platter-spin-group -->
+
+          <!-- Reflective sheen arc -->
+          <path class="hdd-sheen" d="M 46,22 A 32,32 0 0 1 92,26"
+                fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="4"
+                stroke-linecap="round" opacity="0.04"/>
+
+          <!-- Spindle hub -->
+          <circle cx="72" cy="54" r="9"  fill="url(#rg-spindle)" stroke="#404040" stroke-width="1"/>
+          <circle cx="72" cy="54" r="4.5" fill="#0c0c0e" stroke="#303030" stroke-width="0.6"/>
+          <circle cx="72" cy="54" r="1.8" fill="#282828"/>
+
+          <!-- Actuator arm group — pivot is at local (0,0), translated to SVG (142,38) -->
+          <!-- JS animates this group's transform attribute for seek motion -->
+          <g class="hdd-arm-group" id="hdd-arm-group" transform="translate(142,38) rotate(-35)">
+            <!-- Arm body (coords relative to pivot) -->
+            <path class="hdd-arm-body"
+                  d="M 0,0 Q -24,6 -62,16"
+                  fill="none" stroke="#686870" stroke-width="4.5" stroke-linecap="round"/>
+            <!-- Arm underside shadow -->
+            <path d="M 0,2 Q -24,9 -62,19"
+                  fill="none" stroke="#282828" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+            <!-- Arm top highlight -->
+            <path d="M 0,-2 Q -24,4 -60,13"
+                  fill="none" stroke="rgba(180,180,190,0.08)" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- Flexure/suspension (thin) -->
+            <line x1="-56" y1="15" x2="-60" y2="16" stroke="#909090" stroke-width="0.8" opacity="0.6"/>
+            <!-- R/W head housing -->
+            <circle cx="-62" cy="16" r="5.5" fill="#18100a" stroke="#a07828" stroke-width="1.4"/>
+            <!-- Head glow core -->
+            <circle class="hdd-head-glow" id="hdd-head-glow" cx="-62" cy="16" r="2.8" fill="#d29922" opacity="0.65"/>
+            <!-- Pivot bearing (drawn last so it sits on top) -->
+            <circle cx="0" cy="0" r="10" fill="#1e1e24" stroke="#3c3c44" stroke-width="1"/>
+            <circle cx="0" cy="0" r="5.5" fill="#141416" stroke="#343438" stroke-width="0.6"/>
+            <circle cx="0" cy="0" r="2.5" fill="#242424"/>
+          </g>
+
+          <!-- SATA data connector (right edge) -->
+          <rect x="149" y="47" width="11" height="22" rx="2"
+                fill="#0c0c0e" stroke="#2a2a2e" stroke-width="0.5"/>
+          <line x1="152" y1="47" x2="152" y2="69" stroke="#1c1c1e" stroke-width="0.6"/>
+          <line x1="155" y1="47" x2="155" y2="69" stroke="#1c1c1e" stroke-width="0.6"/>
+          <line x1="158" y1="47" x2="158" y2="69" stroke="#1c1c1e" stroke-width="0.6"/>
+
+          <!-- Corner screws (Phillips head) -->
+          <g><circle cx="13" cy="13" r="5.5" fill="url(#rg-screw)" stroke="#3a3a3a" stroke-width="0.5"/>
+            <line x1="9.5"  y1="13"   x2="16.5" y2="13"   stroke="#505050" stroke-width="0.8"/>
+            <line x1="13"   y1="9.5"  x2="13"   y2="16.5" stroke="#505050" stroke-width="0.8"/>
+          </g>
+          <g><circle cx="149" cy="13" r="5.5" fill="url(#rg-screw)" stroke="#3a3a3a" stroke-width="0.5"/>
+            <line x1="145.5" y1="13"   x2="152.5" y2="13"   stroke="#505050" stroke-width="0.8"/>
+            <line x1="149"   y1="9.5"  x2="149"   y2="16.5" stroke="#505050" stroke-width="0.8"/>
+          </g>
+          <g><circle cx="13" cy="95" r="5.5" fill="url(#rg-screw)" stroke="#3a3a3a" stroke-width="0.5"/>
+            <line x1="9.5"  y1="95"   x2="16.5" y2="95"   stroke="#505050" stroke-width="0.8"/>
+            <line x1="13"   y1="91.5" x2="13"   y2="98.5" stroke="#505050" stroke-width="0.8"/>
+          </g>
+          <g><circle cx="149" cy="95" r="5.5" fill="url(#rg-screw)" stroke="#3a3a3a" stroke-width="0.5"/>
+            <line x1="145.5" y1="95"   x2="152.5" y2="95"   stroke="#505050" stroke-width="0.8"/>
+            <line x1="149"   y1="91.5" x2="149"   y2="98.5" stroke="#505050" stroke-width="0.8"/>
+          </g>
+
+        </svg>
+      </div>
+      <div class="disk-sec-title swap-title">
+        Swap Space <span class="cnt" id="swap-cnt">0 pages</span>
+      </div>
+      <div id="swap-grid" class="swap-grid"></div>
+      <div id="swap-empty" class="disk-empty-msg">No pages in swap yet</div>
+
+      <div class="disk-sec-title file-title" style="margin-top:6px">
+        File Store <span class="cnt" id="file-cnt">0 pages</span>
+      </div>
+      <div id="file-grid" class="file-grid"></div>
+      <div id="file-empty" class="disk-empty-msg" style="color:#3a1870">No file-backed pages yet</div>
+      </div><!-- end disk-storage-group -->
+    </div>
+  </div>
+</div>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+<footer id="footer">
+  <div id="narrative-area">
+    <div id="nar-title"></div>
+    <div id="narrative-text">Load a simulation and press <b>▶ Load</b> to begin.</div>
+  </div>
+  <div id="stats-area">
+    <div id="stats-p0" class="stats-row">
+      <span class="st-pid">P0 ▸</span>
+      <span class="st-k" title="page faults resolved">Maps:</span><span class="st-v maps" id="s0-maps">0</span>
+      <span class="st-k" title="pages evicted">Evicts:</span><span class="st-v" id="s0-unmaps">0</span>
+      <span class="st-k" title="swapped in from disk">Ins:</span><span class="st-v" id="s0-ins">0</span>
+      <span class="st-k" title="swapped out to disk">Outs:</span><span class="st-v outs" id="s0-outs">0</span>
+      <span class="st-k" title="zero-filled new pages">Zeros:</span><span class="st-v" id="s0-zeros">0</span>
+      <span class="st-k" title="segmentation faults">Segv:</span><span class="st-v segv" id="s0-segv">0</span>
+    </div>
+    <div id="stats-p1" class="stats-row" style="display:none">
+      <span class="st-pid">P1 ▸</span>
+      <span class="st-k">Maps:</span><span class="st-v maps" id="s1-maps">0</span>
+      <span class="st-k">Evicts:</span><span class="st-v" id="s1-unmaps">0</span>
+      <span class="st-k">Ins:</span><span class="st-v" id="s1-ins">0</span>
+      <span class="st-k">Outs:</span><span class="st-v outs" id="s1-outs">0</span>
+      <span class="st-k">Zeros:</span><span class="st-v" id="s1-zeros">0</span>
+      <span class="st-k">Segv:</span><span class="st-v segv" id="s1-segv">0</span>
+    </div>
+    <div class="stats-total">
+      <span class="st-k">Context switch:</span><span class="st-v" id="sc-ctx">0</span>
+      <span class="st-k" style="margin-left:6px">Page faults:</span><span class="st-v maps" id="sc-faults">0</span>
+      <span class="st-k" style="margin-left:6px">Total cost:</span><span class="cost-val" id="sc-cost">0</span>
+      <span class="st-k" style="margin-left:auto">Step:</span>
+      <span style="font-family:monospace;font-size:11px">
+        <span id="prog-cur">0</span>/<span id="prog-tot">0</span>
+      </span>
+    </div>
+  </div>
+</footer>
+
+<script>
+'use strict';
+
+// ── Simulation engine (identical logic to mmu.cpp) ───────────────────────────
+const RFILE=[10000,1804289383,846930886,1681692777,1714636915,1957747793,424238335,719885386,1649760492,596516649,1189641421,1025202362,1350490027,783368690,1102520059,2044897763,1967513926,1365180540,1540383426,304089172,1303455736,35005211,521595368,294702567,1726956429,336465782,861021530,278722862,233665123,2145174067,468703135,1101513929,1801979802,1315634022,635723058,1369133069,1125898167,1059961393,2089018456,628175011,1656478042,1131176229,1653377373,859484421,1914544919,608413784,756898537,1734575198,1973594324,149798315,2038664370,1129566413,184803526,412776091,1424268980,1911759956,749241873,137806862,42999170,982906996,135497281,511702305,2084420925,1937477084,1827336327,572660336,1159126505,805750846,1632621729,1100661313,1433925857,1141616124,84353895,939819582,2001100545,1998898814,1548233367,610515434,1585990364,1374344043,760313750,1477171087,356426808,945117276,1889947178,1780695788,709393584,491705403,1918502651,752392754,1474612399,2053999932,1264095060,1411549676,1843993368,943947739,1984210012,855636226,1749698586,1469348094,1956297539,1036140795,463480570,2040651434,1975960378,317097467,1892066601,1376710097,927612902,1330573317,603570492,1687926652,660260756,959997301,485560280,402724286,593209441,1194953865,894429689,364228444,1947346619,221558440,270744729,1063958031,1633108117,2114738097,2007905771,1469834481,822890675,1610120709,791698927,631704567,498777856,1255179497,524872353,327254586,1572276965,269455306,1703964683,352406219,1600028624,160051528,2040332871,112805732,1120048829,378409503,515530019,1713258270,1573363368,1409959708,2077486715,1373226340,1631518149,200747796,289700723,1117142618,168002245,150122846,439493451,990892921,1760243555,1231192379,1622597488,111537764,338888228,2147469841,438792350,1911165193,269441500,2142757034,116087764,1869470124,155324914,8936987,1982275856,1275373743,387346491,350322227,841148365,1960709859,1760281936,771151432,1186452551,1244316437,971899228,1476153275,213975407,1139901474,1626276121,653468858,2130794395,1239036029,1884661237,1605908235,1350573793,76065818,1605894428,1789366143,1987231011,1875335928,1784639529,2103318776,1597322404,1939964443,2112255763,1432114613,1067854538,352118606,1782436840,1909002904,165344818,1395235128,532670688,1351797369,492067917,1504569917,680466996,706043324,496987743,159259470,1359512183,480298490,1398295499,1096689772,2086206725,601385644,1172755590,1544617505,243268139,1012502954,1272469786,2027907669,968338082,722308542,1820388464,933110197,6939507,740759355,1285228804,1789376348,502278611,1450573622,1037127828,1034949299,654887343,1529195746,392035568,1335354340,87755422,889023311,1494613810,1447267605,1369321801,745425661,396473730,1308044878,1346811305,1569229320,705178736,1590079444,434248626,1977648522,1470503465,1402586708,552473416,1143408282,188213258,559412924,1884167637,1473442062,201305624,238962600,776532036,1238433452,1273911899,1431419379,620145550,1665947468,619290071,707900973,407487131,2113903881,7684930,1776808933,711845894,404158660,937370163,2058657199,1973387981,1642548899,1501252996,260152959,1472713773,824272813,1662739668,2025187190,1967681095,1850952926,437116466,1704365084,1176911340,638422090,1943327684,1953443376,1876855542,1069755936,1237379107,349517445,588219756,1856669179,1057418418,995706887,1823089412,1065103348,625032172,387451659,1469262009,1562402336,298625210,1295166342,1057467587,1799878206,1555319301,382697713,476667372,1070575321,260401255,296864819,774044599,697517721,2001229904,1950955939,1335939811,1797073940,1756915667,1065311705,719346228,846811127,1414829150,1307565984,555996658,324763920,155789224,231602422,1389867269,780821396,619054081,711645630,195740084,917679292,2006811972,1253207672,570073850,1414647625,1635905385,1046741222,337739299,1896306640,1343606042,1111783898,446340713,1197352298,915256190,1782280524,846942590,524688209,700108581,1566288819,1371499336,2114937732,726371155,1927495994,292218004,882160379,11614769,1682085273,1662981776,630668850,246247255,1858721860,1548348142,105575579,964445884,2118421993,1520223205,452867621,1017679567,1857962504,201690613,213801961,822262754,648031326,1411154259,1737518944,282828202,110613202,114723506,982936784,1676902021,1486222842,950390868,255789528,1266235189,1242608872,1137949908,1277849958,777210498,653448036,1908518808,1023457753,364686248,1309383303,1129033333,1329132133,1280321648,501772890,1781999754,150517567,212251746,1983690368,364319529,1034514500,484238046,1775473788,624549797,767066249,1886086990,739273303,1750003033,1415505363,78012497,552910253,1671294892,1344247686,1795519125,661761152,474613996,425245975,1315209188,235649157,1448703729,1679895436,1545032460,430253414,861543921,677870460,932026304,496060028,828388027,1144278050,332266748,1192707556,31308902,816504794,820697697,655858699,1583571043,559301039,1395132002,1186090428,1974806403,1473144500,1739000681,1498617647,669908538,1387036159,12895151,1144522535,1812282134,1328104339,1380171692,1113502215,860516127,777720504,1543755629,1722060049,1455590964,328298285,70636429,136495343,1472576335,402903177,1329202900,1503885238,1219407971,2416949,12260289,655495367,561717988,1407392292,1841585795,389040743,733053144,1433102829,1887658390,1402961682,672655340,1900553541,400000569,337453826,1081174232,1780172261,1450956042,1941690360,410409117,847228023,1516266761,1866000081,1175526309,1586903190,2002495425,500618996,1989806367,1184214677,2004504234,1061730690,1186631626,2016764524,1717226057,1748349614,1276673168,1411328205,2137390358,2009726312,696947386,1877565100,1265204346,1369602726,1630634994,1665204916,1707056552,564325578,1297893529,1010528946,358532290,1708302647,1857756970,1874799051,1426819080,885799631,1314218593,1281830857,1386418627,1156541312,318561886,1243439214,70788355,1505193512,1112720090,1788014412,1106059479,241909610,1051858969,1095966189,104152274,1748806355,826047641,1369356620,970925433,309198987,887077888,530498338,873524566,37487770,1541027284,1232056856,1745790417,1251300606,959372260,1025125849,2137100237,126107205,159473059,1376035217,1282648518,478034945,471990783,1353436873,1983228458,1584710873,993967637,941804289,1826620483,2045826607,2037770478,1930772757,1647149314,716334471,1152645729,470591100,1025533459,2039723618,1001089438,1899058025,2077211388,394633074,983631233,1675518157,1645933681,1943003493,553160358,1635550270,2069110699,712633417,864101839,1204275569,1190668363,1336092622,410228794,1026413173,773319847,1404196431,1968217462,452456682,1302539390,1858504292,235745791,802205057,427355115,1388391521,1272796157,1452888574,1280631491,126401947,1204462951,1210359231,521035021,40610537,738393740,19485054,1983614030,1291554098,1655035325,1905241081,2004187516,371653516,962033002,1047372231,1707746139,1372261796,2073785404,333582338,628974580,1894519218,786039021,1931513970,1605539862,1021784812,586235379,2032894977,262692685,1859031536,1338299904,1543324176,1985433483,395279207,606199759,358984857,435889744,1344593499,378469911,272020127,488663950,2033505236,29777560,345367818,257675105,991810563,1392740049,1965421244,216588711,1319041805,151519934,845563291,1066077375,937558955,629593614,524133589,1959343768,1215828993,409544918,74552805,927376882,1747844822,1617876982,765326717,2143124030,76593093,1124311574,431530126,1421186593,1502781486,703550253,1909850543,1388803074,733327814,107734713,1646478179,1725138377,1500474762,1464415775,1941727088,672032919,1615935710,639806732,1738110294,406011017,1269400346,114760235,217871137,337745691,524305153,292423943,1265122573,124666328,1910300925,2030449291,120306710,1986894018,1007277217,551836836,1260596963,362575055,1255387090,1022963858,1751378130,1988714904,1130698571,1250372661,1566369633,483689685,567304789,1360613073,1155722604,35756851,2000419805,746349250,441767868,1122336503,861109485,659639006,1460082195,1385414639,952062949,577721120,1510080967,714880226,460686763,1630387677,554290596,1467963981,34740865,1814887560,1830539036,1290127955,690367770,1434433518,1131359211,1821066342,537322532,550245196,157272379,1104627321,1910858270,1312994984,1140384172,1763794427,2059344234,1582152040,738647283,772970072,94307398,51245830,10901063,1046370347,628966950,1520982030,1761250573,1089653714,1003886059,168057522,410134047,1038626924,1982945082,93189435,181271232,525829204,1527622954,1312630443,199411898,2064945486,1862875640,356684278,1022089159,1626250262,1669679262,14989683,1242561041,1581539848,1597141723,1981208324,207026272,1691449122,2032454154,217927335,590335821,513937457,1738909365,204102747,1603591171,595311776,372160269,2013725218,1633938701,207621703,2106914653,1815209933,733450907,1487053959,980356728,932862806,1404515797,695748720,1289547084,279121308,174515334,811742698,294110991,1417076376,245798898,1891252715,1250801052,452825171,1435218189,1135771559,670752506,2025554010,1649709016,262178224,82173109,1105816539,857490000,454333378,972058109,343945053,661955081,931489114,11671338,1395405989,271059426,992028067,180785147,1675575223,1687776787,1470332231,1954696532,1862292122,134591281,101323875,1131884850,380390179,1992576590,235202254,833215350,1280311131,1370973813,1503967857,1158381494,873199181,1766146081,1240554603,1979015720,476152433,1694887982,803590181,820097487,209359415,1735079296,831768825,1604765404,2006138722,1823796892,1785550551,1534230297,1364090032,1108399134,1341443181,1078898506,1242990415,1442767057,63299708,1623380595,1287859999,298501962,309112297,420687483,1669475776,1813080154,1579068977,395191309,1431742587,672139932,226723382,1907895021,219544266,1030313563,580508860,428903682,617909211,1412277685,2033669086,476564285,1088590930,1671735990,2010794583,305197314,632651476,1204754116,1384095820,1875641892,500037525,1447395528,1351538839,1787897525,1745897490,1660651136,61101360,1267889618,1326247643,1640170337,1663080928,610506582,164826621,1889804310,370917955,384370888,772634225,951426815,813274570,1390543437,216220853,699460008,1867107722,1304811783,223712350,1730418657,1610009097,856363827,787689126,846621269,584522071,1287726651,146533149,1936060910,928140528,1892430639,1449228398,989241888,1012836610,627992393,481928577,528433890,1238498976,646755199,270754552,1609416931,1031126087,1043388777,413360099,1844400657,286448566,629580952,396377017,6072641,1934392735,620089368,1736491298,1396918184,1476453195,376696776,96055805,2060975266,1664423428,242588954,1849552528,445080308,2135019593,1151297278,1434322197,1000372555,1779289672,1916250774,1528806445,870305000,415522325,1799560997,332238283,1446648412,695466127,745598382,1143565421];
+
+const INPUTS={
+in1:`1\n1\n0 63 0 0\nc 0\nr 14\nw 51\nr 15\nw 55\nr 43\nr 10\nw 11\nr 37\nw 20\nr 41\nw 38\nr 0\nr 30\nr 15\nr 13\nr 44\nr 21\nr 37\nw 28\nr 56\nr 31\nr 4\nw 38\nw 48\nr 3\nr 5\nw 5\nr 24\nr 8\nw 1`,
+in3:`1\n4\n0 10 0 0\n11 42 0 0\n43 47 0 0\n48 63 0 0\nc 0\nr 7\nr 11\nr 18\nr 30\nr 13\nr 40\nr 20\nw 37\nw 5\nw 33\nr 31\nr 0\nr 12\nr 20\nr 40\nr 41\nw 7\nr 6\nr 0\nr 0\nr 0\nr 22\nr 30\nr 9\nr 59\nw 54\nr 2\nw 62\nr 16\nr 47\nr 58\nr 1\nr 30\nr 35\nr 55\nr 57\nw 20\nr 17\nr 28\nr 42\nr 21\nr 3\nr 29\nr 47\nw 23\nr 2\nr 10\nr 26\nw 12\nr 22\nr 54\nr 5\nr 45\nr 17\nr 4\nr 54\nr 45\nw 2\nr 2\nw 15\nr 27\nr 61\nw 25\nr 33\nw 39\nr 63\nr 25\nr 61\nr 33\nr 38\nw 23\nr 15\nr 31\nr 36\nr 13\nr 10\nw 20\nr 34\nw 39\nr 41\nr 19\nr 3\nw 51\nr 11\nr 19\nw 13\nw 29\nr 7\nr 1\nw 53\nr 52\nr 8\nr 15\nw 12\nr 5\nr 25\nr 43\nr 22\nr 36\nr 8`,
+in4:`1\n6\n0 10 0 0\n11 11 1 0\n12 24 0 0\n25 25 1 0\n26 52 0 0\n53 63 0 0\nc 0\nw 9\nr 46\nr 2\nr 59\nw 24\nr 2\nw 11\nr 38\nr 2\nw 48\nr 26\nr 1\nr 3\nr 30\nr 1\nw 52\nr 12\nr 53\nr 2\nw 10\nr 11\nr 25\nr 43\nr 1\nw 6\nw 13\nr 63\nr 3\nr 30\nr 7\nr 33\nr 50\nw 43\nw 13\nw 31\nr 20\nw 48\nw 18\nr 8\nr 21\nr 15\nw 1\nr 3\nr 19\nr 44\nr 13\nr 35\nr 17\nr 56\nr 13\nr 9\nr 20\nr 36\nw 35\nw 12\nr 9\nr 52\nr 58\nw 16\nr 34\nr 59\nw 30\nr 5\nw 3\nr 33\nr 30\nw 5\nr 56\nw 49\nr 38\nr 39\nw 40\nr 7\nr 29\nr 1\nr 36\nr 9\nr 33\nr 11\nr 18\nw 5\nr 43\nr 1\nr 4\nw 13\nw 0\nr 40\nw 33\nw 21\nr 21\nr 23\nr 24\nr 20\nr 1\nr 50\nr 31\nw 21\nr 11\nr 3\nr 17`,
+in7:`2\n2\n0 42 0 0\n43 63 0 0\n2\n0 17 0 0\n18 63 0 0\nc 0\nr 15\nr 3\nr 0\nr 9\nr 5\nr 2\nr 28\nr 22\nr 23\nr 2\nr 3\nr 8\nr 9\nr 10\nr 12\nw 37\nc 1\nr 2\nr 0\nr 0\nr 0\nr 9\nr 14\nr 3\nr 44\nw 35\nr 0\nw 53\nr 7\nr 26\nr 42\nc 0\nr 1\nr 3\nr 15\nw 17\nw 39\nr 8\nr 0\nr 14\nw 11\nr 17\nr 10\nr 1\nw 43\nr 16\nr 8\nr 1\nr 28\nr 3\nr 3\nw 8\nr 6\nw 11\nc 1\nr 1\nr 35\nr 25\nw 1\nr 1\nw 6\nr 12\nr 49\nw 11\nr 15\nw 20\nr 60\nr 11\nr 49\nr 16\nr 19\nw 10\nr 6\nc 0\nr 8\nr 18\nr 0\nr 29\nr 3\nr 44\nr 5\nw 9\nr 21\nr 38\nw 1\nr 11\nr 46\nr 33\nr 15\nr 3\nc 1\nw 33\nr 32\nr 3\nr 6\nw 5\nr 2\nr 11\nr 23\nr 9\nr 17\nr 3\nc 0\nr 10\nw 4\nr 2\nr 2\nr 7\nr 36\nr 16\nr 28\nr 11\nw 15\nr 8\nr 6\nc 1\nr 0\nr 7\nr 27\nr 16\nw 6\nw 53\nw 34\nr 3\nr 37\nr 0\nr 11\nc 0\nr 8\nr 4\nw 5\nr 34\nw 13\nr 5\nw 9\nr 9\nr 18\nr 4\nr 1\nr 17\nr 3\nr 9\nr 31\nw 0\nr 1\nr 2\nr 32\nr 5\nc 1\nr 14\nr 2\nw 18\nr 17\nw 19\nr 0\nw 29\nr 3\nr 47\nr 1\nw 14\nr 58\nw 12\nr 24\nr 16\nr 5\nr 11\nr 3\nr 36\nw 2\nc 0\nr 3\nr 40\nr 26\nr 16\nr 4\nr 60\nr 12\nw 3\nw 18\nw 12\nw 1\nw 10\nr 0\nr 10\nw 32\nr 0\nr 21\nw 21\nr 1\nr 46\nr 49\nw 57\nr 29\nc 1\nr 12\nw 0\nr 1\nw 0\nr 28\nr 1\nw 15\nr 22\nr 52\nr 9\nr 25\nw 11\nr 27\nr 2\nc 0\nr 6\nw 32\nr 26`,
+in8:`2\n3\n0 35 0 0\n36 36 1 0\n37 63 0 0\n3\n0 39 0 0\n40 40 1 0\n41 63 0 1\nc 0\nr 36\nr 28\nr 38\nw 0\nw 35\nr 10\nr 28\nr 0\nr 1\nr 0\nr 25\nr 1\nr 17\nw 0\nr 18\nr 43\nr 31\nr 15\nr 17\nr 17\nr 1\nw 17\nc 1\nr 19\nr 12\nr 9\nr 58\nw 29\nr 11\nr 17\nw 2\nr 29\nr 49\nr 1\nr 59\nr 3\nr 22\nr 51\nr 15\nr 35\nw 34\nr 23\nw 1\nr 10\nr 57\nw 9\nr 2\nr 21\nr 17\nr 20\nc 0\nr 31\nw 59\nw 40\nr 12\nr 7\nr 6\nr 2\nr 18\nr 12\nr 15\nr 11\nr 14\nr 6\nr 2\nw 4\nr 7\nw 18\nr 42\nr 29\nr 42\nr 28\nc 1\nr 36\nr 3\nr 22\nr 42\nr 21\nr 17\nr 28\nr 7\nr 6\nw 1\nr 16\nr 3\nw 2\nr 41\nc 0\nr 0\nw 1\nr 47\nr 44\nr 9\nw 32\nw 15\nw 20\nr 7\nr 40\nr 11\nr 30\nw 6\nw 38\nc 1\nr 0\nw 24\nw 1\nw 27\nr 38\nw 39\nw 25\nr 9\nr 9\nw 63\nr 38\nr 2\nw 0\nw 5\nw 26\nw 13\nw 45\nr 18\nw 2\nr 13\nw 5\nr 32\nw 1\nr 21\nr 3\nc 0\nr 0\nw 6\nw 46\nr 5\nr 37\nr 4\nr 1\nr 5\nr 12\nr 15\nr 31\nw 5\nr 50\nr 10\nr 15\nr 14\nr 50\nr 15\nw 39\nr 18\nr 42\nw 9\nw 2\nr 0\nc 1\nr 17\nw 45\nr 4\nr 9\nr 1\nr 1\nr 5\nr 1\nw 2\nw 38\nw 16\nr 28\nr 47\nr 11\nr 29\nw 19\nr 48\nr 27\nr 4\nr 22\nr 37\nr 10\nc 0\nr 12\nr 13\nr 50\nr 45\nr 1\nr 12\nw 22\nw 17\nr 17\nw 17\nr 20\nr 7\nc 1\nr 17\nr 1\nw 24\nr 10\nw 43\nw 26\nr 25\nr 7\nw 25\nr 18\nr 23\nr 5\nr 31\nr 4\nr 20\nw 33\nr 15\nw 3\nr 8`
+};
+
+const NVP=64;
+function mkPTE(v){return{present:0,referenced:0,modified:0,writeProtect:0,out:0,fout:0,partofVMA:0,fileMapped:0,vpage:v,frameNum:0};}
+function mkFR(n){return{frameNum:n,pid:0,vpage:0,age:0,lastuse:0,allocationStatus:0};}
+
+function simulate(txt,nF,algo){
+  const lines=txt.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  let i=0;
+  const nP=parseInt(lines[i++]);
+  const procs=[];
+  for(let p=0;p<nP;p++){
+    const pt=[];for(let v=0;v<NVP;v++)pt.push(mkPTE(v));
+    const nV=parseInt(lines[i++]);const vmas=[];
+    for(let j=0;j<nV;j++){const q=lines[i++].split(/\s+/).map(Number);vmas.push({s:q[0],e:q[1],wp:q[2],fm:q[3]});}
+    procs.push({pt,vmas});
+  }
+  const instrs=[];
+  while(i<lines.length){const p=lines[i++].split(/\s+/);instrs.push({op:p[0],arg:parseInt(p[1])});}
+
+  const FT=[],FP=[];
+  for(let f=0;f<nF;f++){const fr=mkFR(f);FT.push(fr);FP.push(fr);}
+  const ST=procs.map((_,p)=>({pid:p,unmaps:0,maps:0,ins:0,outs:0,fins:0,fouts:0,zeros:0,segv:0,segprot:0}));
+  const TC={ci:0,ctxsw:0,exits:0,cost:0};
+  let curP=-1,hand=0,ofs=1,lrr=0;
+
+  // ── TLB (8-entry fully-associative, LRU replacement) ──────────────────────
+  const TLB_SZ=8;
+  const tlb=Array.from({length:TLB_SZ},()=>({valid:0,pid:0,vpn:0,pfn:0,lru:0}));
+  let tlbClk=0;
+  function tlbLookup(pid,vpn){
+    for(let i=0;i<TLB_SZ;i++)
+      if(tlb[i].valid&&tlb[i].pid===pid&&tlb[i].vpn===vpn){tlb[i].lru=tlbClk++;return i;}
+    return -1;
+  }
+  function tlbInsert(pid,vpn,pfn){
+    let s=tlb.findIndex(e=>!e.valid);
+    if(s<0){let m=Infinity;for(let i=0;i<TLB_SZ;i++)if(tlb[i].lru<m){m=tlb[i].lru;s=i;}}
+    tlb[s]={valid:1,pid,vpn,pfn,lru:tlbClk++};return s;
+  }
+  function tlbFlush(){tlb.forEach(e=>{e.valid=0;});}
+  function tlbInval(pid,vpn){const i=tlb.findIndex(e=>e.valid&&e.pid===pid&&e.vpn===vpn);if(i>=0)tlb[i].valid=0;}
+
+  const rnd=()=>{if(ofs>RFILE[0])ofs=1;const v=RFILE[ofs]%nF;ofs++;return v;};
+
+  function unmap(fr){
+    const evs=[];const pte=procs[fr.pid].pt[fr.vpage];
+    evs.push({t:'UNMAP',pid:fr.pid,vp:fr.vpage});ST[fr.pid].unmaps++;
+    if(pte.modified){
+      if(!pte.fileMapped){evs.push({t:'OUT',pid:fr.pid,vp:fr.vpage});pte.out=1;ST[fr.pid].outs++;}
+      else{evs.push({t:'FOUT',pid:fr.pid,vp:fr.vpage});pte.fout=1;ST[fr.pid].fouts++;}
+      pte.modified=0;
+    }
+    tlbInval(fr.pid,fr.vpage);
+    pte.present=0;fr.allocationStatus=0;return evs;
+  }
+
+  function victim(){
+    if(algo==='f'){const fr=FT[hand];hand=(hand+1)%nF;return fr;}
+    if(algo==='r'){return FT[rnd()];}
+    if(algo==='c'){
+      for(;;){const fr=FT[hand];const pte=procs[fr.pid].pt[fr.vpage];
+        if(!pte.referenced){hand=(hand+1)%nF;return fr;}
+        pte.referenced=0;hand=(hand+1)%nF;}}
+    if(algo==='e'){
+      const st=hand,rst=TC.ci-lrr>=47;const cl=[[],[],[],[]];let h=hand,fst=true;
+      do{if(!fst&&h===st)break;fst=false;
+        const fr=FT[h];const pte=procs[fr.pid].pt[fr.vpage];
+        const c=2*pte.referenced+pte.modified;
+        if(c===0&&!cl[0].length){cl[0].push(h);if(!rst)break;}
+        else if(c===1&&!cl[0].length&&!cl[1].length)cl[1].push(h);
+        else if(c===2&&!cl[0].length&&!cl[1].length&&!cl[2].length)cl[2].push(h);
+        else if(c===3&&!cl[0].length&&!cl[1].length&&!cl[2].length&&!cl[3].length)cl[3].push(h);
+        if(rst)pte.referenced=0;h=(h+1)%nF;
+      }while(h!==st);
+      if(rst)lrr=TC.ci+1;
+      let vi;for(let c=0;c<4;c++)if(cl[c].length){vi=cl[c][0];break;}
+      hand=(vi+1)%nF;return FT[vi];
+    }
+    if(algo==='a'){
+      const st=hand;let ma=0xFFFFFFFF,vi=hand,h=hand;
+      do{const fr=FT[h];const pte=procs[fr.pid].pt[fr.vpage];
+        fr.age=(fr.age>>>1);
+        if(pte.referenced){fr.age=(fr.age|0x80000000)>>>0;pte.referenced=0;}
+        if(fr.age<ma){ma=fr.age;vi=h;}
+        h=(h+1)%nF;}while(h!==st);
+      hand=(vi+1)%nF;return FT[vi];
+    }
+    if(algo==='w'){
+      const st=hand;let h=hand,sel=false,vi=0,nrH=[],nrL=[],rH=[],en=0,fst=true;
+      do{if(!fst&&h===st)break;fst=false;
+        const fr=FT[h];const pte=procs[fr.pid].pt[fr.vpage];
+        const ag=TC.ci-fr.lastuse;
+        if(pte.referenced){rH.push(h);pte.referenced=0;fr.lastuse=TC.ci;}
+        else{nrH.push(h);nrL.push(fr.lastuse);en=h;if(ag>49){vi=h;sel=true;h=(h+1)%nF;break;}}
+        en=h;h=(h+1)%nF;}while(h!==st);
+      if(!sel){
+        if(nrH.length){let ml=Infinity;for(let k=0;k<nrH.length;k++)if(nrL[k]<ml){ml=nrL[k];vi=nrH[k];}}
+        else vi=rH[0];
+      }
+      hand=(vi+1)%nF;return FT[vi];
+    }
+  }
+
+  function alloc(){
+    if(FP.length)return{fr:FP.shift(),evs:[]};
+    const v=victim();const evs=unmap(v);return{fr:v,evs};
+  }
+
+  function mapPTE(vp,pid){
+    const evs=[];const pte=procs[pid].pt[vp];
+    if(pte.present){evs.push({t:'HIT',vp});return evs;}
+    if(!pte.partofVMA){evs.push({t:'SEGV',pid,vp});ST[pid].segv++;return evs;}
+    const{fr,evs:ue}=alloc();evs.push(...ue);
+    fr.pid=pid;fr.vpage=vp;fr.age=0;fr.lastuse=TC.ci;fr.allocationStatus=1;
+    pte.frameNum=fr.frameNum;pte.present=1;
+    if(pte.out){evs.push({t:'IN',pid,vp,fr:fr.frameNum});ST[pid].ins++;}
+    else if(pte.fileMapped){evs.push({t:'FIN',pid,vp,fr:fr.frameNum});ST[pid].fins++;}
+    else if(!pte.out&&!pte.fout&&!pte.fileMapped){evs.push({t:'ZERO',pid,vp,fr:fr.frameNum});ST[pid].zeros++;}
+    evs.push({t:'MAP',pid,vp,fr:fr.frameNum});ST[pid].maps++;
+    return evs;
+  }
+
+  const hist=[];
+  for(let n=0;n<instrs.length;n++){
+    TC.ci=n;const{op,arg}=instrs[n];const evs=[];
+    if(op==='c'){curP=arg;TC.ctxsw++;TC.cost+=130;evs.push({t:'CTX',pid:arg});tlbFlush();}
+    else if(op==='r'||op==='w'){
+      TC.cost++;const pid=curP;const pte=procs[pid].pt[arg];
+      for(const vma of procs[pid].vmas)
+        if(vma.s<=arg&&arg<=vma.e){pte.writeProtect=vma.wp;pte.fileMapped=vma.fm;pte.partofVMA=1;break;}
+      pte.vpage=arg;pte.referenced=1;
+      // TLB check before page table walk
+      const tlbIdx=tlbLookup(pid,arg);
+      const wasTlbHit=tlbIdx>=0&&pte.present;
+      evs.push(...mapPTE(arg,pid));
+      // After resolution, update TLB if page is now present
+      if(pte.present) tlbInsert(pid,arg,pte.frameNum);
+      if(op==='w'){if(!pte.writeProtect)pte.modified=1;else{evs.push({t:'SEGPROT',pid,vp:arg});ST[pid].segprot++;}}
+      // Tag this step
+      evs._tlbHit=wasTlbHit;evs._tlbSnap=tlb.map(e=>({...e}));
+    }
+    else if(op==='e'){
+      const ep=arg;TC.exits++;TC.cost+=1230;evs.push({t:'EXIT',pid:ep});
+      for(let p=0;p<procs[ep].pt.length;p++){
+        const pte=procs[ep].pt[p];
+        if(pte.present){const fr=FT[pte.frameNum];ST[ep].unmaps++;evs.push({t:'UNMAP',pid:ep,vp:pte.vpage});
+          if(pte.modified&&pte.fileMapped){evs.push({t:'FOUT',pid:ep,vp:pte.vpage});ST[ep].fouts++;}
+          pte.modified=0;pte.present=0;fr.allocationStatus=0;FP.push(fr);}
+        if(pte.out)pte.out=0;
+      }
+    }
+    hist.push({n,op,arg,evs,curP,
+      tlbHit:evs._tlbHit||false,
+      tlbSnap:evs._tlbSnap||tlb.map(e=>({...e})),
+      pts:procs.map(p=>p.pt.map(e=>({...e}))),
+      vmas:procs.map(p=>p.vmas),
+      ft:FT.map(f=>({...f})),
+      fp:FP.length,
+      st:ST.map(s=>({...s})),
+      tc:{...TC}
+    });
+  }
+  return{hist,nP,vmas:procs.map(p=>p.vmas)};
+}
+
+// ── Parse C++ mmu binary output into hist[] ───────────────────────────────────
+// Called when the server returns real ./mmu output.
+// Reconstructs full per-step state from the event trace + VMA info.
+function parseCppOutput(inputTxt, cppOut, nF){
+  // 1. Parse input file (same preamble as simulate())
+  const lines=inputTxt.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  let li=0;
+  const nP=parseInt(lines[li++]);
+  const procs=[];
+  for(let p=0;p<nP;p++){
+    const pt=[];for(let v=0;v<NVP;v++)pt.push(mkPTE(v));
+    const nV=parseInt(lines[li++]);const vmas=[];
+    for(let j=0;j<nV;j++){const q=lines[li++].split(/\s+/).map(Number);vmas.push({s:q[0],e:q[1],wp:q[2],fm:q[3]});}
+    for(const vma of vmas)
+      for(let v=vma.s;v<=vma.e;v++){pt[v].partofVMA=1;pt[v].writeProtect=vma.wp;pt[v].fileMapped=vma.fm;}
+    procs.push({pt,vmas});
+  }
+
+  // 2. Frame table, stats, cost
+  const FT=[];for(let f=0;f<nF;f++)FT.push(mkFR(f));
+  const ST=procs.map((_,p)=>({pid:p,unmaps:0,maps:0,ins:0,outs:0,fins:0,fouts:0,zeros:0,segv:0,segprot:0}));
+  const TC={ci:0,ctxsw:0,exits:0,cost:0};
+  let curP=-1;
+
+  // 3. TLB (same 8-entry LRU as simulate())
+  const TLB_SZ=8;
+  const tlb=Array.from({length:TLB_SZ},()=>({valid:0,pid:0,vpn:0,pfn:0,lru:0}));
+  let tlbClk=0;
+  const tlbL=(pid,vpn)=>{for(let i=0;i<TLB_SZ;i++)if(tlb[i].valid&&tlb[i].pid===pid&&tlb[i].vpn===vpn){tlb[i].lru=tlbClk++;return i;}return -1;};
+  const tlbI=(pid,vpn,pfn)=>{let s=tlb.findIndex(e=>!e.valid);if(s<0){let m=Infinity;for(let i=0;i<TLB_SZ;i++)if(tlb[i].lru<m){m=tlb[i].lru;s=i;}}tlb[s]={valid:1,pid,vpn,pfn,lru:tlbClk++};};
+  const tlbF=()=>tlb.forEach(e=>{e.valid=0;});
+  const tlbV=(pid,vpn)=>{const i=tlb.findIndex(e=>e.valid&&e.pid===pid&&e.vpn===vpn);if(i>=0)tlb[i].valid=0;};
+
+  // 4. Parse C++ output line-by-line
+  const outLines=cppOut.split('\n');
+  const hist=[];
+  let j=0;
+  while(j<outLines.length){
+    const line=outLines[j];
+    const m=line.match(/^\s*(\d+):\s*==>\s*(\S+)\s+(\d+)/);
+    if(!m){j++;continue;}
+    const n=parseInt(m[1]),op=m[2],arg=parseInt(m[3]);
+    TC.ci=n; j++;
+
+    // Collect indented event lines for this instruction
+    const rawEvs=[];
+    while(j<outLines.length&&/^ /.test(outLines[j])&&outLines[j].trim()){rawEvs.push(outLines[j].trim());j++;}
+
+    const evs=[];
+    let lastUpid=-1,lastUvp=-1;
+
+    if(op==='c'){
+      curP=arg;TC.ctxsw++;TC.cost+=130;evs.push({t:'CTX',pid:arg});tlbF();
+    } else if(op==='r'||op==='w'){
+      TC.cost++;
+      const pte=procs[curP].pt[arg];
+      for(const vma of procs[curP].vmas)
+        if(vma.s<=arg&&arg<=vma.e){pte.writeProtect=vma.wp;pte.fileMapped=vma.fm;pte.partofVMA=1;break;}
+      pte.vpage=arg;pte.referenced=1;
+      const tlbIdx=tlbL(curP,arg);
+      const wasTlbHit=tlbIdx>=0&&pte.present;
+
+      for(const ev of rawEvs){
+        if(ev.startsWith('UNMAP')){
+          const[p,vp]=ev.split(/\s+/)[1].split(':').map(Number);
+          lastUpid=p;lastUvp=vp;
+          const upte=procs[p].pt[vp];const fr=upte.frameNum;
+          FT[fr].allocationStatus=0;upte.present=0;ST[p].unmaps++;tlbV(p,vp);
+          evs.push({t:'UNMAP',pid:p,vp});
+        } else if(ev==='OUT'){
+          if(lastUpid>=0){procs[lastUpid].pt[lastUvp].out=1;procs[lastUpid].pt[lastUvp].modified=0;ST[lastUpid].outs++;}
+          evs.push({t:'OUT',pid:lastUpid,vp:lastUvp});
+        } else if(ev==='FOUT'){
+          if(lastUpid>=0){procs[lastUpid].pt[lastUvp].fout=1;procs[lastUpid].pt[lastUvp].modified=0;ST[lastUpid].fouts++;}
+          evs.push({t:'FOUT',pid:lastUpid,vp:lastUvp});
+        } else if(ev==='IN'){
+          pte.out=0;ST[curP].ins++;evs.push({t:'IN',pid:curP,vp:arg,fr:0});
+        } else if(ev==='FIN'){
+          ST[curP].fins++;evs.push({t:'FIN',pid:curP,vp:arg,fr:0});
+        } else if(ev==='ZERO'){
+          ST[curP].zeros++;evs.push({t:'ZERO',pid:curP,vp:arg,fr:0});
+        } else if(ev.startsWith('MAP')){
+          const fr=parseInt(ev.split(/\s+/)[1]);
+          FT[fr].pid=curP;FT[fr].vpage=arg;FT[fr].allocationStatus=1;FT[fr].lastuse=n;
+          pte.present=1;pte.frameNum=fr;ST[curP].maps++;
+          // backfill fr on preceding IN/FIN/ZERO
+          const prev=evs.filter(e=>e.t==='IN'||e.t==='FIN'||e.t==='ZERO').at(-1);
+          if(prev)prev.fr=fr;
+          evs.push({t:'MAP',pid:curP,vp:arg,fr});
+        }
+      }
+      // HIT if no MAP event
+      if(!evs.some(e=>e.t==='MAP'))evs.push({t:'HIT',vp:arg});
+      // Write sets modified (if not write-protected)
+      if(op==='w'&&pte.present&&!pte.writeProtect)pte.modified=1;
+      else if(op==='w'&&pte.partofVMA&&pte.writeProtect){evs.push({t:'SEGPROT',pid:curP,vp:arg});ST[curP].segprot++;}
+      if(pte.present)tlbI(curP,arg,pte.frameNum);
+      evs._tlbHit=wasTlbHit;evs._tlbSnap=tlb.map(e=>({...e}));
+    }
+
+    hist.push({n,op,arg,evs,curP,
+      tlbHit:evs._tlbHit||false,
+      tlbSnap:evs._tlbSnap||tlb.map(e=>({...e})),
+      pts:procs.map(p=>p.pt.map(e=>({...e}))),
+      vmas:procs.map(p=>p.vmas),
+      ft:FT.map(f=>({...f})),
+      fp:0,
+      st:ST.map(s=>({...s})),
+      tc:{...TC}
+    });
+  }
+  return{hist,nP,vmas:procs.map(p=>p.vmas)};
+}
+
+// ── UI state ──────────────────────────────────────────────────────────────────
+let H=[],nP=1,simVmas=[],step=-1,total=0,playing=false,timer=null,viewPID=0;
+const PALG={f:'FIFO',r:'Random',c:'Clock',e:'ESC/NRU',a:'Aging',w:'Working Set'};
+const PROC_COLORS=['p0','p1','p2','p3'];
+const VMA_COLORS=['#1a6b4a','#1a4a6b','#6b1a4a','#6b4a1a','#4a6b1a','#4a1a6b'];
+const $=id=>document.getElementById(id);
+
+// ── Load & run ────────────────────────────────────────────────────────────────
+async function load(){
+  stopPlay();
+  const inputKey=$('sel-input').value;
+  const nF=+$('sel-frames').value;
+  const algo=$('sel-algo').value;
+  const btn=$('btn-load');
+  btn.disabled=true; btn.textContent='Running...';
+
+  let res, usedCpp=false;
+  try {
+    const resp=await fetch('http://localhost:8765/run',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({input:inputKey,frames:nF,algo}),
+      signal:AbortSignal.timeout(10000)
+    });
+    const data=await resp.json();
+    if(!data.ok) throw new Error(data.stderr||'mmu exited non-zero');
+    res=parseCppOutput(INPUTS[inputKey],data.stdout,nF);
+    usedCpp=true;
+  } catch(e) {
+    // Server not running or error — fall back silently to JS engine
+    res=simulate(INPUTS[inputKey],nF,algo);
+    usedCpp=false;
+  }
+
+  btn.disabled=false; btn.textContent='Load';
+  const src=$('sim-source');
+  if(src){
+    src.textContent=usedCpp?'mmu.cpp':'JS fallback';
+    src.style.color=usedCpp?'var(--green)':'var(--amber)';
+    src.title=usedCpp?'Output from real ./mmu C++ binary':'Server not running (using JS reimplementation)';
+  }
+
+  H=res.hist; nP=res.nP; simVmas=res.vmas; total=H.length; step=-1;
+  _tlbHits=0; _tlbAccesses=0;
+  $('tlb-tbody').innerHTML=''; $('tlb-rate').className='tlb-badge'; $('tlb-rate').textContent='—';
+  $('cpu-pid').textContent='—'; $('cpu-instr').textContent='—';
+  $('cpu-xlate').className='xlate-status xlate-idle'; $('cpu-xlate').textContent='idle'; $('cpu-xlate').style.display='';
+  $('xlate-diagram').style.display='none';
+  $('sb-tot').textContent=total;
+  $('prog-tot').textContent=total;
+  $('stats-p1').style.display=nP>1?'flex':'none';
+  buildProcTabs();
+  buildVPList(0);
+  buildPTTable(0);
+  buildFrameList(nF);
+  [$('btn-first'),$('btn-prev'),$('btn-play'),$('btn-next'),$('btn-last')]
+    .forEach(b=>b.disabled=false);
+  clearArrows();
+  clearPreviewState();
+  renderDisk({ft:H[0]?.ft||[],evs:[],pts:H[0]?.pts||[]});
+  go(0);
+  $('narrative-text').innerHTML='';
+}
+
+// ── Process tabs ──────────────────────────────────────────────────────────────
+function buildProcTabs(){
+  const el=$('vas-proc-tabs');el.innerHTML='';
+  for(let p=0;p<nP;p++){
+    const t=document.createElement('div');
+    t.className='vas-tab'+(p===0?' active':'');
+    t.textContent='Process '+p;
+    t.onclick=()=>{viewPID=p;
+      el.querySelectorAll('.vas-tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      buildVMALegend(p);
+      buildVPList(p);
+      buildPTTable(p);
+      if(step>=0){updateVP(H[step],p);updatePT(H[step],p);drawArrows(H[step],p);}
+    };
+    el.appendChild(t);
+  }
+  buildVMALegend(0);
+}
+
+function buildVMALegend(pid){
+  const el=$('vma-legend');el.innerHTML='';
+  const vmas=simVmas[pid]||[];
+  vmas.forEach((v,i)=>{
+    const d=document.createElement('div');d.className='vma-leg-item';
+    d.innerHTML=`<div class="vma-leg-dot" style="background:${VMA_COLORS[i%VMA_COLORS.length]}"></div>`
+      +`<span>VP${v.s}–${v.e}${v.wp?' <span style="color:var(--blue);font-size:9px">WP</span>':''}${v.fm?' <span style="color:var(--purple);font-size:9px">FM</span>':''}</span>`;
+    el.appendChild(d);
+  });
+}
+
+// ── Build VP list (virtual address space column) ───────────────────────────────
+function buildVPList(pid){
+  const el=$('vp-list');el.innerHTML='';
+  const vmas=simVmas[pid]||[];
+  for(let v=0;v<NVP;v++){
+    const row=document.createElement('div');
+    row.className='vp-row vp-novma';
+    row.id='vp-'+v;
+    const addr='0x'+(v*0x1000).toString(16).toUpperCase().padStart(5,'0');
+    // find VMA
+    let vmaIdx=-1;
+    for(let k=0;k<vmas.length;k++)if(vmas[k].s<=v&&v<=vmas[k].e){vmaIdx=k;break;}
+    let stripeHtml='';
+    if(vmaIdx>=0){
+      stripeHtml=`<div class="vma-stripe" style="background:${VMA_COLORS[vmaIdx%VMA_COLORS.length]}"></div>`;
+    }
+    row.innerHTML=stripeHtml
+      +`<span class="vp-num">${v}</span>`
+      +`<div class="vp-dot"></div>`
+      +`<span class="vp-addr">${addr}</span>`;
+    el.appendChild(row);
+  }
+}
+
+// ── Build PT table ─────────────────────────────────────────────────────────────
+function buildPTTable(pid){
+  const tbody=$('pt-tbody');tbody.innerHTML='';
+  const vmas=simVmas[pid]||[];
+  for(let v=0;v<NVP;v++){
+    const tr=document.createElement('tr');tr.id='pt-row-'+v;
+    const addr='0x'+(v*0x1000).toString(16).toUpperCase().padStart(5,'0');
+    tr.innerHTML=`<td class="pt-vpn">${String(v).padStart(2,'0')}</td>`
+      +`<td class="pt-addr">${addr}</td>`
+      +`<td id="pt-status-${v}"><span class="status-pill pill-novma">—</span></td>`
+      +`<td id="pt-frame-${v}" class="pt-frame fault">—</td>`
+      +`<td id="pt-r-${v}"><div class="bit-dot bit-off"></div></td>`
+      +`<td id="pt-m-${v}"><div class="bit-dot bit-off"></div></td>`
+      +`<td id="pt-flags-${v}"></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Build frame list ───────────────────────────────────────────────────────────
+function buildFrameList(nF){
+  const el=$('frame-list');el.innerHTML='';
+  for(let f=0;f<nF;f++){
+    const d=document.createElement('div');d.className='frame-cell free';d.id='fr-'+f;
+    d.innerHTML=`<span class="frame-num">F${String(f).padStart(2,'0')}</span>`
+      +`<div class="frame-content"><span class="frame-free-lbl">free</span></div>`;
+    el.appendChild(d);
+  }
+}
+
+// ── CPU / MMU panel ───────────────────────────────────────────────────────────
+function renderCPU(s){
+  const isRW=s.op==='r'||s.op==='w';
+  $('cpu-pid').textContent=s.curP>=0?`P${s.curP}`:'—';
+  if(s.op==='c')  $('cpu-instr').textContent=`ctx-sw to P${s.arg}`;
+  else if(isRW)   $('cpu-instr').textContent=`${s.op==='r'?'read':'write'}  VP${String(s.arg).padStart(2,'0')}`;
+  else            $('cpu-instr').textContent='—';
+
+  const diagram=$('xlate-diagram');
+  const badge=$('cpu-xlate');
+  badge.className='xlate-status';
+  const mapEv  =s.evs.find(e=>e.t==='MAP');
+  const hasSegv=s.evs.some(e=>e.t==='SEGV'||e.t==='SEGPROT');
+
+  if(!isRW){
+    diagram.style.display='none';
+    badge.style.display='';
+    if(s.op==='c'){ badge.classList.add('xlate-ctx'); badge.textContent='Context Switch'; }
+    else          { badge.classList.add('xlate-idle'); badge.textContent='idle'; }
+    return;
+  }
+  badge.style.display='none'; // diagram is shown — bottom badge is redundant
+
+  // ── Show diagram ──────────────────────────────────────────────────────────
+  diagram.style.display='block';
+
+  // Virtual address
+  const vp     = s.arg;
+  const vpnHex = vp.toString(16).toUpperCase().padStart(2,'0');
+  const vaddrFull = '0x'+((vp*0x1000)).toString(16).toUpperCase().padStart(5,'0');
+  $('xlate-vaddr').textContent = vaddrFull;
+  $('xlate-vpn').textContent   = vpnHex;
+  $('xlate-off').textContent   = '000';
+
+  // Lookup badge
+  const lb=$('xlate-lookup');
+  lb.className='xlate-lookup-badge';
+  if(hasSegv){
+    lb.classList.add('xlate-lookup-segv'); lb.textContent='Seg fault (no mapping)';
+  } else if(s.tlbHit&&!mapEv){
+    lb.classList.add('xlate-lookup-hit');  lb.textContent='TLB hit';
+  } else if(!s.tlbHit&&!mapEv){
+    lb.classList.add('xlate-lookup-miss'); lb.textContent='TLB miss (PT walk)';
+  } else {
+    lb.classList.add('xlate-lookup-fault');lb.textContent='Page fault (loaded)';
+  }
+
+  // Physical address (only if translation succeeded)
+  const physDiv=$('xlate-phys');
+  if(!hasSegv){
+    // frame number: from MAP event (new load) or from current PT state
+    const fr=mapEv?.fr ?? s.pts[s.curP]?.[vp]?.frameNum ?? null;
+    if(fr!=null){
+      const pfnHex=fr.toString(16).toUpperCase().padStart(2,'0');
+      const paddrFull='0x'+(fr*0x1000).toString(16).toUpperCase().padStart(5,'0');
+      $('xlate-pfn').textContent  = pfnHex;
+      $('xlate-poff').textContent = '000';
+      $('xlate-paddr').textContent= paddrFull;
+      physDiv.style.display='block';
+    } else {
+      physDiv.style.display='none';
+    }
+  } else {
+    physDiv.style.display='none';
+  }
+
+  // Status badge below diagram
+  if(hasSegv)         { badge.classList.add('xlate-fault'); badge.textContent='Seg fault'; }
+  else if(s.tlbHit&&!mapEv){ badge.classList.add('xlate-hit'); badge.textContent='TLB hit'; }
+  else if(!s.tlbHit&&!mapEv){ badge.classList.add('xlate-miss'); badge.textContent='TLB miss (PT walk)'; }
+  else                { badge.classList.add('xlate-fault'); badge.textContent='Page fault (loaded)'; }
+}
+
+// ── TLB panel ─────────────────────────────────────────────────────────────────
+let _tlbHits=0,_tlbAccesses=0;
+
+function renderTLB(s,prevStep){
+  const snap=s.tlbSnap||[];
+  const isRW=s.op==='r'||s.op==='w';
+
+  // Accumulate hit rate (only count forward steps)
+  if(isRW){
+    _tlbAccesses++;
+    if(s.tlbHit)_tlbHits++;
+  }
+
+  // Badge
+  const rate=$('tlb-rate');
+  if(_tlbAccesses===0){
+    rate.className='tlb-badge';rate.textContent='—';
+  } else {
+    const pct=Math.round(_tlbHits/_tlbAccesses*100);
+    rate.className='tlb-badge'+(s.tlbHit?' is-hit':isRW?' is-miss':'');
+    rate.textContent=`${_tlbHits}/${_tlbAccesses} Hits (${pct}%)`;
+  }
+
+  // Find which slot was just hit or newly inserted (last inserted = highest lru)
+  let hitSlot=-1,newSlot=-1;
+  if(isRW){
+    if(s.tlbHit){
+      // find the entry matching current pid+vpn
+      hitSlot=snap.findIndex(e=>e.valid&&e.pid===s.curP&&e.vpn===s.arg);
+    } else {
+      // newly inserted entry has highest lru value among valid entries
+      let maxLru=-1;
+      snap.forEach((e,i)=>{if(e.valid&&e.lru>maxLru){maxLru=e.lru;newSlot=i;}});
+    }
+  }
+
+  const tbody=$('tlb-tbody');tbody.innerHTML='';
+  snap.forEach((e,i)=>{
+    const tr=document.createElement('tr');
+    if(!e.valid){
+      tr.className='tlb-row-invalid';
+      tr.innerHTML=`<td style="color:var(--tdim)">${i}</td><td class="tlb-v-off">0</td><td>—</td><td>—</td><td>—</td>`;
+    } else {
+      let cls='';
+      if(i===hitSlot) cls='tlb-row-hit';
+      else if(i===newSlot) cls='tlb-row-new';
+      tr.className=cls;
+      const procColor=['var(--green)','var(--blue)','var(--purple)','var(--red)'][e.pid%4];
+      tr.innerHTML=`<td style="color:var(--tdim)">${i}</td>`
+        +`<td class="tlb-v-on">1</td>`
+        +`<td style="color:${procColor};font-weight:600">P${e.pid}</td>`
+        +`<td>VP${String(e.vpn).padStart(2,'0')}</td>`
+        +`<td style="color:var(--green)">F${String(e.pfn).padStart(2,'0')}</td>`;
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Navigate ──────────────────────────────────────────────────────────────────
+function go(idx, drawArrs=true){
+  if(idx<0)idx=0;if(idx>=total)idx=total-1;if(idx<0)return;
+  const prevStep=step;
+  const s=H[idx];step=idx;
+  // Reset hit counters when jumping backwards
+  if(idx<=prevStep){
+    _tlbHits=0;_tlbAccesses=0;
+    for(let i=0;i<=idx;i++){const ss=H[i];if(ss.op==='r'||ss.op==='w'){_tlbAccesses++;if(ss.tlbHit)_tlbHits++;}}
+    // subtract this step (renderTLB will add it again)
+    if(s.op==='r'||s.op==='w'){_tlbAccesses--;if(s.tlbHit)_tlbHits--;}
+  }
+  updateVP(s,viewPID);
+  updatePT(s,viewPID);
+  updateFrames(s);
+  renderDisk(s);
+  reconcilePlatSegs(s);
+  renderCPU(s);
+  renderTLB(s,prevStep);
+  updateStats(s);
+  $('sb-cur').textContent=idx+1;
+  $('prog-cur').textContent=idx+1;
+  $('nar-title').textContent=`Step ${idx+1}`;
+  $('pt-proc-hdr').textContent=`Page Table (Process ${viewPID})`;
+  $('btn-first').disabled=idx<=0;$('btn-prev').disabled=idx<=0;
+  $('btn-next').disabled=idx>=total-1;$('btn-last').disabled=idx>=total-1;
+  // scroll PT to active row, accounting for the sticky thead height
+  if(s.op==='r'||s.op==='w'){
+    const ptBody=$('pt-body');
+    const ptRow=$('pt-row-'+s.arg);
+    const thead=document.querySelector('#pt-table thead');
+    if(ptBody&&ptRow&&thead){
+      const theadH=thead.offsetHeight;
+      const rowTop=ptRow.offsetTop;
+      const rowBot=rowTop+ptRow.offsetHeight;
+      const visTop=ptBody.scrollTop+theadH;
+      const visBot=ptBody.scrollTop+ptBody.clientHeight;
+      if(rowTop<visTop)        ptBody.scrollTop=rowTop-theadH;
+      else if(rowBot>visBot)   ptBody.scrollTop=rowBot-ptBody.clientHeight;
+    }
+  }
+  if(drawArrs) scheduleDrawArrows(s,viewPID);
+}
+
+// ── Scroll VAS to active VP ───────────────────────────────────────────────────
+function scrollVAS(s,pid){
+  if((s.op==='r'||s.op==='w')&&s.curP===pid){
+    const row=$('vp-'+s.arg);
+    if(row)row.scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+}
+
+// ── Update virtual address space ──────────────────────────────────────────────
+function updateVP(s,pid){
+  const pt=s.pts[pid]||[];
+  const activeVP=(s.op==='r'||s.op==='w')&&s.curP===pid?s.arg:-1;
+  for(let v=0;v<NVP;v++){
+    const row=$('vp-'+v);if(!row)continue;
+    const pte=pt[v];
+    row.classList.remove('vp-novma','vp-miss','vp-present','vp-dirty','vp-swap','vp-active');
+    if(!pte.partofVMA) row.classList.add('vp-novma');
+    else if(!pte.present){
+      row.classList.add(pte.out?'vp-swap':'vp-miss');
+    } else {
+      row.classList.add(pte.modified?'vp-dirty':'vp-present');
+    }
+    if(v===activeVP) row.classList.add('vp-active');
+  }
+}
+
+// ── Update page table ─────────────────────────────────────────────────────────
+function updatePT(s,pid){
+  const pt=s.pts[pid]||[];
+  const activeVP=(s.op==='r'||s.op==='w')&&s.curP===pid?s.arg:-1;
+  // find evicted vpages this step
+  const evicted=new Set(s.evs.filter(e=>e.t==='UNMAP'&&e.pid===pid).map(e=>e.vp));
+  const mapped=new Set(s.evs.filter(e=>e.t==='MAP'&&e.pid===pid).map(e=>e.vp));
+
+  for(let v=0;v<NVP;v++){
+    const tr=$('pt-row-'+v);if(!tr)continue;
+    const pte=pt[v];
+    tr.classList.remove('pt-row-active');
+    if(v===activeVP) tr.classList.add('pt-row-active');
+
+    // Status
+    const stEl=$('pt-status-'+v);
+    if(stEl){
+      if(!pte.partofVMA) stEl.innerHTML='<span class="status-pill pill-novma">no VMA</span>';
+      else if(s.evs.some(e=>e.t==='SEGV'&&e.vp===v&&e.pid===pid))
+        stEl.innerHTML='<span class="status-pill pill-segv">SEGFAULT</span>';
+      else if(s.evs.some(e=>e.t==='SEGPROT'&&e.vp===v&&e.pid===pid))
+        stEl.innerHTML='<span class="status-pill pill-wp">WRITE PROT</span>';
+      else if(!pte.present)
+        stEl.innerHTML=pte.out
+          ?'<span class="status-pill pill-swap">Swap</span>'
+          :'<span class="status-pill pill-fault">Not Loaded</span>';
+      else
+        stEl.innerHTML='<span class="status-pill pill-ram">In RAM</span>';
+    }
+
+    // Frame
+    const frEl=$('pt-frame-'+v);
+    if(frEl){
+      frEl.className='pt-frame';
+      if(pte.present){frEl.textContent='F'+String(pte.frameNum).padStart(2,'0');frEl.classList.add('present');}
+      else if(pte.out){frEl.textContent='Swap';frEl.classList.add('swapped');}
+      else{frEl.textContent='—';frEl.classList.add('fault');}
+    }
+
+    // Bits
+    const rEl=$('pt-r-'+v);const mEl=$('pt-m-'+v);
+    if(rEl) rEl.innerHTML=`<div class="bit-dot ${pte.referenced?'bit-on-R':'bit-off'}"></div>`;
+    if(mEl) mEl.innerHTML=`<div class="bit-dot ${pte.modified?'bit-on-M':'bit-off'}"></div>`;
+
+    // Flags
+    const flEl=$('pt-flags-'+v);
+    if(flEl){
+      let flags='';
+      if(pte.writeProtect&&pte.partofVMA) flags+='<span class="tag tag-wp">WP</span> ';
+      if(pte.fileMapped&&pte.partofVMA)   flags+='<span class="tag tag-fm">FM</span>';
+      flEl.innerHTML=flags;
+    }
+  }
+}
+
+// ── Update physical memory ────────────────────────────────────────────────────
+function updateFrames(s){
+  const ft=s.ft;
+  const mappedF=new Set(s.evs.filter(e=>e.t==='MAP').map(e=>e.fr));
+  const unmappedF=new Set();
+  // find which frames were evicted: look for frames that were occupied before but are free now
+  s.evs.filter(e=>e.t==='UNMAP').forEach(e=>{
+    // the frame that held this vpage before the step
+    for(let f=0;f<ft.length;f++){
+      if(!ft[f].allocationStatus&&mappedF.has(f)){unmappedF.add(f);break;}
+    }
+  });
+
+  let used=0;
+  for(let f=0;f<ft.length;f++){
+    const fr=ft[f];const cell=$('fr-'+f);if(!cell)continue;
+    cell.className='frame-cell';
+    if(!fr.allocationStatus){
+      cell.innerHTML=`<span class="frame-num">F${String(f).padStart(2,'0')}</span>`
+        +`<div class="frame-content"><span class="frame-free-lbl">— Free —</span></div>`;
+      cell.classList.add('free');
+    } else {
+      used++;
+      const cls=PROC_COLORS[fr.pid%PROC_COLORS.length];
+      cell.classList.add(cls);
+      const dirty=s.pts[fr.pid]?.[fr.vpage]?.modified;
+      const vaddr='0x'+(fr.vpage*0x1000).toString(16).toUpperCase().padStart(5,'0');
+      cell.innerHTML=`<span class="frame-num">F${String(f).padStart(2,'0')}</span>`
+        +`<div class="frame-content">`
+        +`<div class="frame-pid-vp">P${fr.pid} : VP${String(fr.vpage).padStart(2,'0')}</div>`
+        +`<div class="frame-vaddr">${vaddr}</div>`
+        +`</div>`
+        +`<div class="frame-dirty-dot ${dirty?'dirty':'clean'}" title="${dirty?'Modified/Dirty':'Clean'}"></div>`;
+      if(mappedF.has(f)) cell.classList.add('frame-mapped');
+    }
+  }
+  const nF=ft.length;
+  $('ram-util-txt').textContent=`${used} / ${nF} frames used`;
+  $('ram-bar').style.width=(used/nF*100)+'%';
+}
+
+// ── HDD actuator arm animation ────────────────────────────────────────────────
+let _seekRaf=null, _seekT0=null;
+// Arm angles calibrated so the R/W head sits on the correct track ring:
+//   OUTER_A ≈ -35° → head at r≈43 (outer platter edge)
+//   INNER_A ≈  -8° → head at r≈13.7 (just outside innermost track)
+const ARM_OUTER=-35, ARM_INNER=-8;
+
+function easeInOut(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+
+function animateArm(active){
+  const arm=document.getElementById('hdd-arm-group');
+  if(!arm)return;
+  if(!active){
+    if(_seekRaf){cancelAnimationFrame(_seekRaf);_seekRaf=null;_seekT0=null;}
+    // park at outer track
+    arm.setAttribute('transform',`translate(142,38) rotate(${ARM_OUTER})`);
+    return;
+  }
+  if(_seekRaf)return; // already running
+  const DUR=3.0; // seconds per full seek cycle (outer→inner→outer)
+  function frame(ts){
+    if(!_seekT0)_seekT0=ts;
+    const phase=((ts-_seekT0)/1000/DUR)%1; // 0..1
+    let angle;
+
+    if(phase<0.42){
+      // ── Phase 1: sweep outer → inner ────────────────────────────────
+      const t=phase/0.42;
+      angle=ARM_OUTER+(ARM_INNER-ARM_OUTER)*easeInOut(t);
+    } else if(phase<0.48){
+      // ── Phase 2: overshoot past inner, then settle ───────────────────
+      // arm overshoots by ~3° toward center, then snaps back
+      const t=(phase-0.42)/0.06;
+      const overshoot=3; // degrees past inner boundary
+      angle=ARM_INNER - overshoot*Math.sin(t*Math.PI);
+    } else if(phase<0.52){
+      // ── Phase 3: hold briefly at inner boundary ──────────────────────
+      angle=ARM_INNER;
+    } else if(phase<0.94){
+      // ── Phase 4: sweep inner → outer ────────────────────────────────
+      const t=(phase-0.52)/0.42;
+      angle=ARM_INNER+(ARM_OUTER-ARM_INNER)*easeInOut(t);
+    } else {
+      // ── Phase 5: overshoot at outer, damped settle ───────────────────
+      const t=(phase-0.94)/0.06;
+      const overshoot=2.5;
+      angle=ARM_OUTER + overshoot*Math.sin(t*Math.PI)*Math.exp(-t*3);
+    }
+
+    arm.setAttribute('transform',`translate(142,38) rotate(${angle.toFixed(3)})`);
+    _seekRaf=requestAnimationFrame(frame);
+  }
+  _seekRaf=requestAnimationFrame(frame);
+}
+
+// ── Dynamic platter segments ───────────────────────────────────────────────────
+const _platSegs = new Map(); // key "pid:vp:band" → <path> element
+
+function _removePlatSeg(pid, vp, isFile) {
+  const key = `${pid}:${vp}:${isFile?'f':'s'}`;
+  const el = _platSegs.get(key);
+  if (el) { el.remove(); _platSegs.delete(key); }
+}
+
+// Deterministic pseudo-random in 0..1 from page identity + salt
+function _phash(pid, vp, salt) {
+  return Math.abs(Math.sin(pid * 1000 + vp * 73 + salt * 137) * 43758.5453) % 1;
+}
+
+function _makeDiskArc(startDeg, span, innerR, outerR) {
+  const cx = 72, cy = 54;
+  const a1 = startDeg * Math.PI / 180;
+  const a2 = (startDeg + span) * Math.PI / 180;
+  const lg = span > 180 ? 1 : 0;
+  const p = n => n.toFixed(2);
+  return `M ${p(cx+outerR*Math.cos(a1))},${p(cy+outerR*Math.sin(a1))} `
+       + `A ${outerR},${outerR} 0 ${lg} 1 ${p(cx+outerR*Math.cos(a2))},${p(cy+outerR*Math.sin(a2))} `
+       + `L ${p(cx+innerR*Math.cos(a2))},${p(cy+innerR*Math.sin(a2))} `
+       + `A ${innerR},${innerR} 0 ${lg} 0 ${p(cx+innerR*Math.cos(a1))},${p(cy+innerR*Math.sin(a1))} Z`;
+}
+
+function _addPlatSeg(pid, vp, isFile) {
+  const key = `${pid}:${vp}:${isFile?'f':'s'}`;
+  if (_platSegs.has(key)) return;
+  const angle = _phash(pid, vp, 0) * 360;
+  const span  = 12 + _phash(pid, vp, 1) * 44;  // 12°–56°
+  const [ir, or_] = isFile ? [14, 18] : [26, 30];
+  const palette = isFile
+    ? ['#9048c8','#7030b0','#b468e0','#5e20a0','#a05ad8','#7838b8','#c07aec']
+    : ['#f0aa10','#e09a00','#ffc020','#d49005','#c98200','#e8a410','#f5b418'];
+  const color = palette[Math.floor(_phash(pid, vp, 2) * palette.length)];
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  el.setAttribute('d', _makeDiskArc(angle, span, ir, or_));
+  el.setAttribute('fill', color);
+  el.setAttribute('stroke', isFile ? '#140820' : '#1e1000');
+  el.setAttribute('stroke-width', '0.5');
+  el.setAttribute('opacity', '0.9');
+  const g = document.getElementById('platter-spin-group');
+  if (g) g.appendChild(el);
+  _platSegs.set(key, el);
+}
+
+function reconcilePlatSegs(s) {
+  // Build the expected set of on-disk pages from PTE state
+  const expected = new Map();
+  for (let p = 0; p < (s.pts||[]).length; p++)
+    for (let v = 0; v < NVP; v++) {
+      const pte = s.pts[p][v];
+      if (pte.out  && !pte.present) expected.set(`${p}:${v}:s`, {pid:p, vp:v, f:false});
+      if (pte.fout && pte.fileMapped && !pte.present) expected.set(`${p}:${v}:f`, {pid:p, vp:v, f:true});
+    }
+  // Remove segments no longer on disk
+  for (const key of [..._platSegs.keys()])
+    if (!expected.has(key)) { _platSegs.get(key).remove(); _platSegs.delete(key); }
+  // Add segments for pages newly on disk
+  for (const [key, {pid, vp, f}] of expected)
+    if (!_platSegs.has(key)) _addPlatSeg(pid, vp, f);
+}
+
+// ── Render disk ───────────────────────────────────────────────────────────────
+function renderDisk(s){
+  const newOut =new Set(s.evs.filter(e=>e.t==='OUT' ).map(e=>e.pid+':'+e.vp));
+  const newFout=new Set(s.evs.filter(e=>e.t==='FOUT').map(e=>e.pid+':'+e.vp));
+  const newIn  =new Set(s.evs.filter(e=>e.t==='IN'  ).map(e=>e.pid+':'+e.vp));
+  const newFin =new Set(s.evs.filter(e=>e.t==='FIN' ).map(e=>e.pid+':'+e.vp));
+
+  const hasDisk=newOut.size||newFout.size||newIn.size||newFin.size;
+  const dv=$('disk-visual-wrap');
+  dv.classList.toggle('disk-active',hasDisk>0);
+  animateArm(hasDisk>0);
+
+  // Swap: out=1 && !present
+  const swapPgs=[];
+  for(let p=0;p<(s.pts||[]).length;p++)
+    for(let v=0;v<NVP;v++){
+      const pte=s.pts[p][v];
+      if(pte.out&&!pte.present)swapPgs.push({p,v});
+    }
+
+  const sg=$('swap-grid');sg.innerHTML='';
+  $('swap-empty').style.display=swapPgs.length?'none':'block';
+  $('swap-cnt').textContent=swapPgs.length+' pages';
+  swapPgs.forEach(({p,v})=>{
+    const key=p+':'+v;
+    const d=document.createElement('div');d.className='swap-slot';
+    d.id='swap-'+p+'-'+v;
+    d.title=`P${p}:VP${v} (anonymous page in swap space)`;
+    const blk=(p*64+v).toString(16).toUpperCase().padStart(4,'0');
+    d.innerHTML=`<span class="slot-type">SWP</span>`
+      +`<div class="slot-addr">BLK:${blk}</div>`
+      +`<div class="slot-content">P${p}·VP${String(v).padStart(2,'0')}</div>`;
+    if(newOut.has(key)) d.classList.add('new');
+    if(newIn.has(key))  d.classList.add('read');
+    sg.appendChild(d);
+  });
+
+  // File store: fout=1 && fileMapped && !present
+  const filePgs=[];
+  for(let p=0;p<(s.pts||[]).length;p++)
+    for(let v=0;v<NVP;v++){
+      const pte=s.pts[p][v];
+      if(pte.fileMapped&&pte.fout&&!pte.present)filePgs.push({p,v});
+    }
+
+  const fg=$('file-grid');fg.innerHTML='';
+  $('file-empty').style.display=filePgs.length?'none':'block';
+  $('file-cnt').textContent=filePgs.length+' pages';
+  filePgs.forEach(({p,v})=>{
+    const key=p+':'+v;
+    const d=document.createElement('div');d.className='file-slot';
+    d.id='file-'+p+'-'+v;
+    d.title=`P${p}:VP${v} (file-backed page on disk)`;
+    const blk=(p*64+v).toString(16).toUpperCase().padStart(4,'0');
+    d.innerHTML=`<span class="slot-type">FILE</span>`
+      +`<div class="slot-addr">F:${blk}</div>`
+      +`<div class="slot-content">P${p}·VP${String(v).padStart(2,'0')}</div>`;
+    if(newFout.has(key)) d.classList.add('new');
+    if(newFin.has(key))  d.classList.add('read');
+    fg.appendChild(d);
+  });
+
+}
+
+// ── Draw SVG arrows ───────────────────────────────────────────────────────────
+let _arrowRafId=null;
+function clearArrows(){
+  if(_arrowRafId!==null){cancelAnimationFrame(_arrowRafId);_arrowRafId=null;}
+  const svg=$('arrows');
+  while(svg.children.length>1)svg.removeChild(svg.lastChild);
+}
+function scheduleDrawArrows(s,pid){
+  if(_arrowRafId!==null)cancelAnimationFrame(_arrowRafId);
+  _arrowRafId=requestAnimationFrame(()=>{_arrowRafId=null;drawArrows(s,pid);});
+}
+
+function relRect(el){
+  const main=$('main');
+  const er=el.getBoundingClientRect();
+  const mr=main.getBoundingClientRect();
+  return{top:er.top-mr.top,left:er.left-mr.left,right:er.right-mr.left,
+         bottom:er.bottom-mr.top,w:er.width,h:er.height};
+}
+
+function drawArrow(x1,y1,x2,y2,color,animate){
+  const svg=$('arrows');
+  const cols={green:'#3fb950',amber:'#d29922',blue:'#58a6ff',red:'#f85149',purple:'#bc8cff'};
+  const c=cols[color]||cols.blue;
+  const dir=x2>=x1?1:-1;
+  const mid=Math.abs(x2-x1)*0.45;
+  const d=`M${x1},${y1} C${x1+dir*mid},${y1} ${x2-dir*mid},${y2} ${x2},${y2}`;
+
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d',d);
+  path.setAttribute('stroke',c);
+  path.setAttribute('stroke-width','2');
+  path.setAttribute('fill','none');
+  path.setAttribute('marker-end',`url(#ah-${color})`);
+  path.setAttribute('opacity','0.75');
+  svg.appendChild(path);
+
+  if(animate){
+    // Measure the real path length so the dash never clips a long arc
+    const len=path.getTotalLength()||600;
+    path.style.strokeDasharray=len;
+    path.style.strokeDashoffset=len;
+    path.style.transition='stroke-dashoffset 0.4s ease-out';
+    // Defer to next frame so the browser registers the initial offset before animating
+    requestAnimationFrame(()=>{ path.style.strokeDashoffset='0'; });
+
+    // Traveling dot
+    const circ=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circ.setAttribute('r','5');circ.setAttribute('fill',c);circ.setAttribute('opacity','0.9');
+    const am=document.createElementNS('http://www.w3.org/2000/svg','animateMotion');
+    am.setAttribute('dur','0.45s');am.setAttribute('fill','freeze');am.setAttribute('path',d);
+    circ.appendChild(am);svg.appendChild(circ);
+  }
+}
+
+function drawArrows(s,pid){
+  clearArrows();
+  if(!s||(s.op!=='r'&&s.op!=='w')||s.curP!==pid)return;
+  const v=s.arg;
+  const pte=s.pts[pid]?.[v];if(!pte)return;
+
+  const ptRow=$('pt-row-'+v);if(!ptRow)return;
+  const pr=relRect(ptRow);
+  const mainH=$('main').clientHeight;
+  // Only skip if the row is entirely outside #pt-body's visible area
+  const pb=relRect($('pt-body'));
+  if(pr.bottom<=pb.top||pr.top>=pb.bottom)return;
+
+  const x1=pr.right+1;
+  const y1=pr.top+pr.h/2;
+
+  const isSegv=s.evs.some(e=>e.t==='SEGV'&&e.vp===v);
+  if(isSegv)return;
+
+  const isHit=s.evs.some(e=>e.t==='HIT'&&e.vp===v);
+  const mapEv=s.evs.find(e=>e.t==='MAP'&&e.pid===pid&&e.vp===v);
+  const isOut=s.evs.some(e=>e.t==='OUT'&&e.pid===pid);
+  const isFout=s.evs.some(e=>e.t==='FOUT'&&e.pid===pid);
+
+  if(pte.present){
+    // Arrow PT → RAM frame
+    const frEl=$('fr-'+pte.frameNum);if(!frEl)return;
+    const fr=relRect(frEl);
+    if(fr.top<0||fr.bottom>mainH)return;
+    const x2=fr.left-1;const y2=fr.top+fr.h/2;
+    const color=pte.modified?'amber':(isHit?'green':'blue');
+    drawArrow(x1,y1,x2,y2,color,!!mapEv||isHit);
+  } else if(pte.out){
+    // Arrow PT → swap slot
+    const slotEl=$('swap-'+pid+'-'+v);if(!slotEl)return;
+    const sr=relRect(slotEl);
+    if(sr.top<0||sr.bottom>mainH)return;
+    const x2=sr.left-1;const y2=sr.top+sr.h/2;
+    drawArrow(x1,y1,x2,y2,'amber',false);
+  } else if(pte.fileMapped&&pte.fout){
+    // Arrow PT → file slot
+    const slotEl=$('file-'+pid+'-'+v);if(!slotEl)return;
+    const sr=relRect(slotEl);if(sr.top<0||sr.bottom>mainH)return;
+    drawArrow(x1,y1,sr.left-1,sr.top+sr.h/2,'purple',false);
+  }
+}
+
+// ── RAM ↔ Disk transfer arrows ────────────────────────────────────────────────
+// dir='out': frame→disk (eviction), dir='in': disk→frame (load)
+function drawRamDiskArrow(s, dir){
+  const mapEv=s.evs.find(e=>e.t==='MAP');
+  const umEv =s.evs.find(e=>e.t==='UNMAP');
+  if(!mapEv)return;
+
+  const isOut =s.evs.some(e=>e.t==='OUT');
+  const isFout=s.evs.some(e=>e.t==='FOUT');
+  const isIn  =s.evs.some(e=>e.t==='IN');
+  const isFin =s.evs.some(e=>e.t==='FIN');
+
+  const frEl=$('fr-'+mapEv.fr);
+  if(!frEl)return;
+  const fr=relRect(frEl);
+
+  if(dir==='out'){
+    if(!isOut&&!isFout)return;
+    const isFile=isFout;
+    const ev=umEv||mapEv;
+    const slotEl=isFile?$('file-'+ev.pid+'-'+ev.vp):$('swap-'+ev.pid+'-'+ev.vp);
+    const hdd=$('hdd-svg');
+    const target=slotEl||(hdd?hdd:null);
+    if(!target)return;
+    const tr=relRect(target);
+    const tx=slotEl?tr.left-2:tr.left+tr.w/2;
+    const ty=slotEl?tr.top+tr.h/2:tr.top+tr.h*0.35;
+    drawArrow(fr.right+2,fr.top+fr.h/2,tx,ty,isFile?'purple':'amber',true);
+  } else {
+    if(!isIn&&!isFin)return;
+    const isFile=isFin;
+    const slotEl=isFile?$('file-'+mapEv.pid+'-'+mapEv.vp):$('swap-'+mapEv.pid+'-'+mapEv.vp);
+    if(slotEl){
+      const sr=relRect(slotEl);
+      // arrow: left edge of disk slot → right edge of RAM frame (right-to-left)
+      drawArrow(sr.left-2,sr.top+sr.h/2,fr.right+2,fr.top+fr.h/2,isFile?'purple':'amber',true);
+    } else {
+      // page no longer in disk state (loaded) — draw from HDD visual
+      const hdd=$('hdd-svg');
+      if(!hdd)return;
+      const hr=relRect(hdd);
+      drawArrow(hr.left,hr.top+hr.h*0.35,fr.right+2,fr.top+fr.h/2,isFile?'purple':'amber',true);
+    }
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats(s){
+  const st=s.st;
+  if(st[0]){
+    ['maps','unmaps','ins','outs','zeros','segv'].forEach(k=>{$('s0-'+k).textContent=st[0][k]||0;});
+  }
+  if(st[1]){
+    ['maps','unmaps','ins','outs','zeros','segv'].forEach(k=>{$('s1-'+k).textContent=st[1]?.[k]||0;});
+  }
+  $('sc-ctx').textContent=s.tc.ctxsw;
+  let faults=0;
+  for(let i=0;i<=step;i++)faults+=H[i].evs.filter(e=>e.t==='MAP').length;
+  $('sc-faults').textContent=faults;
+  let cost=s.tc.cost;
+  for(const ss of s.st)
+    cost+=410*ss.unmaps+350*ss.maps+3200*ss.ins+2750*ss.outs+2350*ss.fins+2800*ss.fouts+150*ss.zeros+440*ss.segv+410*ss.segprot;
+  $('sc-cost').textContent=cost.toLocaleString();
+}
+
+// ── Narrative ─────────────────────────────────────────────────────────────────
+const ALNG={f:'FIFO (oldest page)',r:'Random',c:'Clock',e:'ESC/NRU',a:'Aging',w:'Working Set'};
+
+// Each part: {html, action}
+// action: 'cpu' | 'tlb' | 'evict' | 'disk' | 'load' | 'map'
+function buildNarrativeParts(s){
+  const{op,arg,evs,curP}=s;
+  const algo=$('sel-algo').value;
+  const p=(html,action)=>({html,action});
+  const parts=[];
+
+  const nl=(cls,lbl)=>`<span class="nl ${cls}">${lbl}</span>`;
+
+  if(op==='c'){
+    parts.push(p(`${nl('info','Context switch:')} CPU switches to <b>Process ${arg}</b>.`,'cpu'));
+    parts.push(p(`Process ${arg}'s page table is now active. All virtual addresses resolve using its mappings.`,'map'));
+    return parts;
+  }
+  if(op==='e'){
+    const u=evs.filter(e=>e.t==='UNMAP').length;
+    parts.push(p(`${nl('bad','Exit:')} <b>Process ${arg}</b> terminates.`,'cpu'));
+    parts.push(p(`${u} physical frame(s) reclaimed and returned to the free pool.`,'map'));
+    return parts;
+  }
+  if(op==='r'||op==='w'){
+    const vaddr='0x'+(arg*0x1000).toString(16).toUpperCase().padStart(5,'0');
+    const act=op==='r'?'Read':'Write';
+    const isHit=evs.some(e=>e.t==='HIT');
+    const isSegv=evs.some(e=>e.t==='SEGV');
+    const isSP=evs.some(e=>e.t==='SEGPROT');
+    const mapEv=evs.find(e=>e.t==='MAP');
+    const umEvs=evs.filter(e=>e.t==='UNMAP');
+    const isOut=evs.some(e=>e.t==='OUT');
+    const isFout=evs.some(e=>e.t==='FOUT');
+    const isIn=evs.some(e=>e.t==='IN');
+    const isFin=evs.some(e=>e.t==='FIN');
+    const isZero=evs.some(e=>e.t==='ZERO');
+
+    parts.push(p(`${nl('info',act+':')} <b>P${curP}</b> accesses <b>VP${arg}</b> <span class="dim">(${vaddr})</span>.`,'cpu'));
+
+    if(isSegv){
+      parts.push(p(`${nl('bad','Segfault:')} VP${arg} has no valid VMA mapping. Process ${curP} receives SIGSEGV.`,'map'));
+      return parts;
+    }
+    if(isHit){
+      const fn=s.pts[curP]?.[arg]?.frameNum;
+      parts.push(p(`${nl('hit','Hit:')} VP${arg} is already in RAM at <b>Frame ${fn}</b>. No disk access needed.`,'tlb'));
+      if(op==='w'){
+        if(isSP) parts.push(p(`${nl('bad','Write-protected:')} Write to VP${arg} blocked.`,'map'));
+        else     parts.push(p(`${nl('fault','Modified:')} VP${arg} is now marked modified (dirty).`,'map'));
+      }
+      return parts;
+    }
+
+    parts.push(p(`${nl('fault','Page fault:')} VP${arg} is not in RAM.`,null));
+
+    if(umEvs.length){
+      const ev=umEvs[0];
+      parts.push(p(`${nl('fault','Evict:')} No free frames. <b>${ALNG[algo]||algo}</b> selects <b>Frame ${mapEv?.fr??'?'}</b> (holds P${ev.pid}:VP${ev.vp}).`,'tlb+evict'));
+      if(isOut)       parts.push(p(`${nl('fault','Out:')} P${ev.pid}:VP${ev.vp} was modified. Written to swap to preserve changes.`,'disk'));
+      else if(isFout) parts.push(p(`${nl('file','File out:')} P${ev.pid}:VP${ev.vp} was file-mapped and modified. Written back to file store.`,'disk'));
+      else            parts.push(p(`${nl('hit','Clean:')} P${ev.pid}:VP${ev.vp} was unmodified. Frame discarded. Disk copy is still valid.`,'evict'));
+    } else {
+      parts.push(p(`${nl('hit','Free frame:')} <b>Frame ${mapEv?.fr??'?'}</b> is available. No eviction needed.`,'tlb+evict'));
+    }
+
+    if(isZero)    parts.push(p(`${nl('hit','Zero:')} Frame ${mapEv?.fr??'?'} cleared. Fresh anonymous page ready.`,'load'));
+    else if(isIn) parts.push(p(`${nl('info','In:')} <b>P${curP}:VP${arg}</b> restored from swap into Frame ${mapEv?.fr??'?'}.`,'load'));
+    else if(isFin)parts.push(p(`${nl('file','File in:')} <b>P${curP}:VP${arg}</b> read from file store into Frame ${mapEv?.fr??'?'}.`,'load'));
+
+    if(mapEv){
+      let html=`${nl('hit','Mapped:')} <b>P${curP}:VP${arg}</b> is now in RAM at <b>Frame ${mapEv.fr}</b>.`;
+      if(op==='w'&&!isSP) html+=` Write completes. Page marked modified (dirty).`;
+      if(isSP)            html+=` ${nl('bad','Write-protected:')} Write blocked.`;
+      parts.push(p(html,'map'));
+    }
+  }
+  return parts;
+}
+
+// ── Apply visual for a single substep ─────────────────────────────────────────
+function applyPartVisuals(part,nextS){
+  const mapEv=nextS.evs.find(e=>e.t==='MAP');
+  const umEv=nextS.evs.find(e=>e.t==='UNMAP');
+  // Arrows only appear on the 'map' sentence
+  if(part.action!=='map') clearArrows();
+  switch(part.action){
+    case null: break;
+    case 'cpu':
+      renderCPU(nextS);
+      break;
+    case 'tlb':
+      renderTLB(nextS,step-1);
+      updateStats(nextS);
+      break;
+    case 'tlb+evict':
+      renderTLB(nextS,step-1);
+      updateStats(nextS);
+      if(mapEv){
+        const cell=$('fr-'+mapEv.fr);
+        if(cell){
+          if(umEv) cell.classList.add('frame-evicted');
+          else     cell.classList.add('frame-mapped');
+        }
+      }
+      break;
+    case 'evict':
+      if(mapEv){
+        const cell=$('fr-'+mapEv.fr);
+        if(cell){
+          if(umEv) cell.classList.add('frame-evicted');
+          else     cell.classList.add('frame-mapped');
+        }
+      }
+      break;
+    case 'disk': {
+      renderDisk(nextS);
+      drawRamDiskArrow(nextS,'out');
+      // Add platter segment for the page being written out to disk
+      const outEv=nextS.evs.find(e=>e.t==='OUT'||e.t==='FOUT');
+      if(outEv) _addPlatSeg(outEv.pid, outEv.vp, outEv.t==='FOUT');
+      break;
+    }
+    case 'load': {
+      if(mapEv){
+        const cell=$('fr-'+mapEv.fr);
+        if(cell){
+          const cls=PROC_COLORS[nextS.curP%PROC_COLORS.length];
+          cell.className=`frame-cell ${cls}`;
+          cell.innerHTML=`<span class="frame-num">F${String(mapEv.fr).padStart(2,'0')}</span>`
+            +`<div class="frame-content"><span class="frame-free-lbl" style="opacity:.6;font-style:italic">Loading\u2026</span></div>`
+            +`<div class="frame-dirty-dot clean"></div>`;
+        }
+      }
+      drawRamDiskArrow(nextS,'in');
+      // Remove platter segment for the page being loaded back into RAM
+      const inEv=nextS.evs.find(e=>e.t==='IN'||e.t==='FIN');
+      if(inEv) _removePlatSeg(inEv.pid, inEv.vp, inEv.t==='FIN');
+      break;
+    }
+    case 'map':
+      updatePT(nextS,viewPID);
+      updateFrames(nextS);
+      updateVP(nextS,viewPID);
+      updateStats(nextS);
+      if(nextS.op==='r'||nextS.op==='w'){
+        const ptBody=$('pt-body');
+        const ptRow=$('pt-row-'+nextS.arg);
+        const thead=document.querySelector('#pt-table thead');
+        if(ptBody&&ptRow&&thead){
+          const theadH=thead.offsetHeight;
+          const rowTop=ptRow.offsetTop;
+          const rowBot=rowTop+ptRow.offsetHeight;
+          const visTop=ptBody.scrollTop+theadH;
+          const visBot=ptBody.scrollTop+ptBody.clientHeight;
+          if(rowTop<visTop) ptBody.scrollTop=rowTop-theadH;
+          else if(rowBot>visBot) ptBody.scrollTop=rowBot-ptBody.clientHeight;
+        }
+      }
+      scheduleDrawArrows(nextS,viewPID);
+      break;
+  }
+}
+
+function updateNarrative(s){
+  $('narrative-text').innerHTML=buildNarrativeParts(s).map(p=>p.html).join(' ');
+}
+
+// ── Play / Pause ──────────────────────────────────────────────────────────────
+function startPlay(){
+  if(step>=total-1){step=-1;clearArrows();}
+  playing=true;
+  $('btn-play').textContent='⏸ Pause';
+  $('btn-play').classList.add('playing');
+  tick();
+}
+function stopPlay(){
+  playing=false;if(timer){clearTimeout(timer);timer=null;}
+  $('btn-play').textContent='▶ Play';
+  $('btn-play').classList.remove('playing');
+}
+function tick(){
+  if(!playing)return;
+  if(step>=total-1){stopPlay();return;}
+  clearPreviewState();
+  go(step+1);
+  $('narrative-text').innerHTML='';
+  const sp=+$('speed').value;
+  const delay=Math.round(750/Math.pow(sp,1.25));
+  timer=setTimeout(tick,delay);
+}
+
+// ── Progressive narrative state ───────────────────────────────────────────────
+// step advances immediately when a reveal starts.
+// Each click shows the next sentence and applies its visual.
+// After the last sentence the reveal closes automatically.
+
+let _pvParts=[], _pvPartIdx=-1, _pvStepQueued=false;
+
+function clearPreviewState(){
+  _pvParts=[];_pvPartIdx=-1;_pvStepQueued=false;
+}
+
+function _pvShow(idx){
+  $('narrative-text').innerHTML=_pvParts[idx].html;
+}
+function _pvBanner(){
+  $('nar-title').textContent=`Step ${step+1}  (${_pvPartIdx+1}/${_pvParts.length})`;
+}
+
+// ── Shared step-advance logic ─────────────────────────────────────────────────
+function advanceOne(){
+  if(!_pvStepQueued){
+    if(step>=total-1)return;
+    // Advance step NOW so all visual helpers reference the new state
+    step++;
+    // Reset arm — 'disk'/'load' substep will restart it if this step has disk I/O
+    animateArm(false);
+    _pvParts=buildNarrativeParts(H[step]);
+    _pvPartIdx=0;
+    _pvStepQueued=true;
+    // Update step counter & nav buttons
+    $('sb-cur').textContent=step+1;
+    $('prog-cur').textContent=step+1;
+    $('btn-first').disabled=step<=0;$('btn-prev').disabled=step<=0;
+    $('btn-next').disabled=step>=total-1;$('btn-last').disabled=step>=total-1;
+    _pvBanner();
+    _pvShow(0);
+    applyPartVisuals(_pvParts[0],H[step]);
+  } else if(_pvPartIdx<_pvParts.length-1){
+    _pvPartIdx++;
+    _pvBanner();
+    _pvShow(_pvPartIdx);
+    applyPartVisuals(_pvParts[_pvPartIdx],H[step]);
+    // After last sentence close the reveal (keep text visible)
+    if(_pvPartIdx===_pvParts.length-1) clearPreviewState();
+  }
+}
+
+// ── Shared step-retreat logic ─────────────────────────────────────────────────
+function retreatOne(){
+  if(_pvStepQueued){
+    if(_pvPartIdx>0){
+      // Go back one sentence: revert ALL panels to previous step's base state,
+      // then re-apply visuals only up to the new (decremented) sentence index.
+      _pvPartIdx--;
+      const targetStep=step;
+      go(step-1, false); // fully reverts all panels; sets step=step-1; no arrows rAF
+      step=targetStep;   // restore
+      $('sb-cur').textContent=step+1;
+      $('prog-cur').textContent=step+1;
+      $('btn-first').disabled=step<=0;$('btn-prev').disabled=step<=0;
+      $('btn-next').disabled=step>=total-1;$('btn-last').disabled=step>=total-1;
+      clearArrows();
+      for(let i=0;i<=_pvPartIdx;i++) applyPartVisuals(_pvParts[i],H[step]);
+      _pvBanner();
+      _pvShow(_pvPartIdx);
+    } else {
+      // Cancel reveal, revert to the step before (step-1)
+      clearPreviewState();
+      go(step-1);
+      $('narrative-text').innerHTML='';
+    }
+  } else {
+    // Not in reveal — go directly to the previous step
+    if(step<=0)return;
+    clearPreviewState();
+    go(step-1);
+    $('narrative-text').innerHTML='';
+  }
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+$('btn-load').onclick=load;
+
+$('btn-first').onclick=()=>{stopPlay();clearPreviewState();if(H.length){go(0);$('narrative-text').innerHTML='';}};
+$('btn-prev').onclick =()=>{stopPlay();retreatOne();};
+$('btn-last').onclick =()=>{stopPlay();clearPreviewState();if(H.length){go(total-1);$('narrative-text').innerHTML='';}};
+$('btn-next').onclick =()=>{stopPlay();advanceOne();};
+$('btn-play').onclick  =()=>{if(playing)stopPlay();else startPlay();};
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT')return;
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();stopPlay();advanceOne();}
+  if(e.key==='ArrowLeft'){e.preventDefault();stopPlay();retreatOne();}
+  if(e.key==='p'||e.key==='P'){if(playing)stopPlay();else startPlay();}
+});
+
+window.addEventListener('resize',()=>{if(step>=0)scheduleDrawArrows(H[step],viewPID);});
+// Redraw arrows when PT or VA columns scroll
+$('pt-body').addEventListener('scroll',()=>{if(step>=0)scheduleDrawArrows(H[step],viewPID);});
+$('vas-body').addEventListener('scroll',()=>{if(step>=0)scheduleDrawArrows(H[step],viewPID);});
+
+window.addEventListener('load',load);
+</script>
+</body>
+</html>

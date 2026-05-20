@@ -1,7 +1,8 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import subprocess, json, os, sys
 
-PROJ = os.path.dirname(os.path.abspath(__file__))
+WEB  = os.path.dirname(os.path.abspath(__file__))
+PROJ = os.path.dirname(WEB)
 MMU  = os.path.join(PROJ, 'mmu')
 
 class Handler(BaseHTTPRequestHandler):
@@ -27,8 +28,8 @@ class Handler(BaseHTTPRequestHandler):
         frames = int(body.get('frames', 16))
         algo   = body.get('algo',   'f')
 
-        input_file = os.path.join(PROJ, 'lab3_assign', inp)
-        rfile      = os.path.join(PROJ, 'lab3_assign', 'rfile')
+        input_file = os.path.join(PROJ, 'test', inp)
+        rfile      = os.path.join(PROJ, 'test', 'rfile')
 
         if not os.path.isfile(MMU):
             result = {'ok': False, 'stdout': '', 'stderr': './mmu binary not found. Run: make'}

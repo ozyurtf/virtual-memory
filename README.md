@@ -4,7 +4,7 @@ In this project, I implemented a virtual memory simulator that models different 
 
 ## Demo 
 
-[![Demo](assets/figures/virtual-memory.png)](https://www.youtube.com/watch?v=NNNUpGNWaA8)
+[![Demo](assets/virtual-memory.png)](https://www.youtube.com/watch?v=NNNUpGNWaA8)
 
 ## Features
 
